@@ -1,1 +1,12 @@
+/* index.css */
 @import "tailwindcss";
+
+/* Enable dark mode - This is the missing piece! */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Optional: Add base styles */
+@layer base {
+  body {
+    @apply bg-white dark:bg-slate-900;
+  }
+}

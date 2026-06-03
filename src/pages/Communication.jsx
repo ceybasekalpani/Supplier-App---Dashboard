@@ -51,7 +51,7 @@ export default function Communication() {
                     {filtered.map(n => (
                       <tr key={n.id} className="border-b border-slate-50 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30">
                         <td className="py-3 px-4 font-semibold text-slate-700 dark:text-slate-300 max-w-[140px] truncate">{n.title}</td>
-                        <td className="py-3 px-4 text-slate-400 text-xs max-w-[160px] truncate">{n.description}</td>
+                        <td className="py-3 px-4 text-slate-400 text-xs max-w-40 truncate">{n.description}</td>
                         <td className="py-3 px-4 text-slate-400 text-xs">{n.created}</td>
                         <td className="py-3 px-4 text-slate-400 text-xs">{n.expiry}</td>
                         <td className="py-3 px-4"><StatusBadge status={n.status} /></td>
