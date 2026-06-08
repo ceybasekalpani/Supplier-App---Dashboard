@@ -1,28 +1,50 @@
 export const suppliers = [
-  { id: 1, regNo: 'SUP001', name: 'Kamal Perera',     route: 'Route A', phone: '0771234567', address: 'Kandy',        bank: 'BOC',        branch: 'Kandy',        payment: 'Bank', status: 'active'   },
-  { id: 2, regNo: 'SUP002', name: 'Saman Silva',      route: 'Route B', phone: '0779876543', address: 'Galle',        bank: 'NSB',        branch: 'Galle',        payment: 'Cash', status: 'active'   },
-  { id: 3, regNo: 'SUP003', name: 'Nimal Fernando',   route: 'Route A', phone: '0762345678', address: 'Matara',       bank: 'HNB',        branch: 'Matara',       payment: 'Bank', status: 'inactive' },
-  { id: 4, regNo: 'SUP004', name: 'Sunil Jayasinghe', route: 'Route C', phone: '0753456789', address: 'Ratnapura',    bank: "People's",   branch: 'Ratnapura',    payment: 'Bank', status: 'active'   },
-  { id: 5, regNo: 'SUP005', name: 'Priya Kumari',     route: 'Route B', phone: '0714567890', address: 'Nuwara Eliya', bank: 'Commercial', branch: 'Nuwara Eliya', payment: 'Bank', status: 'active'   },
+  { id: 1, regNo: 'SUP001', name: 'Kamal Perera',     route: 'Route A', phone: '0771234567', address: 'Kandy',        bank: 'BOC',        branch: 'Kandy',        accountNo: '7012345678', payment: 'Bank Transfer', status: 'active',   land: { acres: 2, rood: 1, perch: 12 } },
+  { id: 2, regNo: 'SUP002', name: 'Saman Silva',      route: 'Route B', phone: '0779876543', address: 'Galle',        bank: 'NSB',        branch: 'Galle',        accountNo: '2098765431', payment: 'Cash',          status: 'active',   land: { acres: 1, rood: 3, perch: 4 } },
+  { id: 3, regNo: 'SUP003', name: 'Nimal Fernando',   route: 'Route A', phone: '0762345678', address: 'Matara',       bank: 'HNB',        branch: 'Matara',       accountNo: '5544332211', payment: 'Cheque',        status: 'inactive', land: { acres: 3, rood: 0, perch: 18 } },
+  { id: 4, regNo: 'SUP004', name: 'Sunil Jayasinghe', route: 'Route C', phone: '0753456789', address: 'Ratnapura',    bank: "People's",   branch: 'Ratnapura',    accountNo: '8844221199', payment: 'Bank Transfer', status: 'active',   land: { acres: 2, rood: 2, perch: 9 } },
+  { id: 5, regNo: 'SUP005', name: 'Priya Kumari',     route: 'Route B', phone: '0714567890', address: 'Nuwara Eliya', bank: 'Commercial', branch: 'Nuwara Eliya', accountNo: '3344556677', payment: 'Bank Transfer', status: 'active',   land: { acres: 1, rood: 2, perch: 30 } },
 ]
 
 export const advanceRequests = [
-  { id: 1, regNo: 'SUP001', name: 'Kamal Perera',     amount: 25000, date: '2026-05-14', status: 'pending',  checkedBy: '-',     remarks: '' },
-  { id: 2, regNo: 'SUP002', name: 'Saman Silva',      amount: 15000, date: '2026-05-10', status: 'approved', checkedBy: 'Admin', remarks: 'Verified' },
-  { id: 3, regNo: 'SUP003', name: 'Nimal Fernando',   amount: 30000, date: '2026-05-08', status: 'rejected', checkedBy: 'Admin', remarks: 'Insufficient leaf' },
-  { id: 4, regNo: 'SUP004', name: 'Sunil Jayasinghe', amount: 20000, date: '2026-05-12', status: 'pending',  checkedBy: '-',     remarks: '' },
-  { id: 5, regNo: 'SUP005', name: 'Priya Kumari',     amount: 18000, date: '2026-05-13', status: 'approved', checkedBy: 'Admin', remarks: 'OK' },
+  { id: 1, regNo: 'SUP001', name: 'Kamal Perera',     amount: 25000, paymentType: 'Bank Transfer', date: '2026-06-02', status: 'pending',  checkedBy: '-',     remarks: '' },
+  { id: 2, regNo: 'SUP002', name: 'Saman Silva',      amount: 15000, paymentType: 'Cash',          date: '2026-05-10', status: 'approved', checkedBy: 'Admin', remarks: 'Verified' },
+  { id: 3, regNo: 'SUP003', name: 'Nimal Fernando',   amount: 30000, paymentType: 'Cheque',        date: '2026-05-08', status: 'rejected', checkedBy: 'Admin', remarks: 'Insufficient leaf' },
+  { id: 4, regNo: 'SUP004', name: 'Sunil Jayasinghe', amount: 20000, paymentType: 'Bank Transfer', date: '2026-06-01', status: 'pending',  checkedBy: '-',     remarks: '' },
+  { id: 5, regNo: 'SUP005', name: 'Priya Kumari',     amount: 18000, paymentType: 'Bank Transfer', date: '2026-05-13', status: 'approved', checkedBy: 'Admin', remarks: 'OK' },
+  { id: 6, regNo: 'SUP001', name: 'Kamal Perera',     amount: 12000, paymentType: 'Cheque',        date: '2026-05-20', status: 'approved', checkedBy: 'Admin', remarks: 'Previous month request' },
 ]
 
 export const fertilizerRequests = [
-  { id: 1, regNo: 'SUP001', name: 'Kamal Perera',     type: 'Urea', qty: 50, unit: 'kg', date: '2026-05-14', status: 'pending',  checkedBy: '-'     },
+  { id: 1, regNo: 'SUP001', name: 'Kamal Perera',     type: 'Urea', qty: 50, unit: 'kg', date: '2026-06-02', status: 'pending',  checkedBy: '-'     },
   { id: 2, regNo: 'SUP002', name: 'Saman Silva',      type: 'TSP',  qty: 25, unit: 'kg', date: '2026-05-10', status: 'approved', checkedBy: 'Admin' },
-  { id: 3, regNo: 'SUP004', name: 'Sunil Jayasinghe', type: 'Urea', qty: 75, unit: 'kg', date: '2026-05-12', status: 'pending',  checkedBy: '-'     },
+  { id: 3, regNo: 'SUP004', name: 'Sunil Jayasinghe', type: 'Urea', qty: 75, unit: 'kg', date: '2026-06-01', status: 'pending',  checkedBy: '-'     },
 ]
 
 export const itemRequests = [
-  { id: 1, regNo: 'SUP001', name: 'Kamal Perera',   type: 'Harvesting Bag', qty: 10, unit: 'pcs',   date: '2026-05-14', status: 'pending',  checkedBy: '-'     },
+  { id: 1, regNo: 'SUP001', name: 'Kamal Perera',   type: 'Harvesting Bag', qty: 10, unit: 'pcs',   date: '2026-06-02', status: 'pending',  checkedBy: '-'     },
   { id: 2, regNo: 'SUP003', name: 'Nimal Fernando', type: 'Gloves',         qty: 5,  unit: 'pairs', date: '2026-05-09', status: 'approved', checkedBy: 'Admin' },
+]
+
+export const leafRates = [
+  { month: '2026-05', superRate: 240, normalRate: 190 },
+  { month: '2026-06', superRate: 255, normalRate: 205 },
+]
+
+export const leafDeliveries = [
+  { regNo: 'SUP001', date: '2026-05-10', superNet: 18, normalNet: 26 },
+  { regNo: 'SUP001', date: '2026-05-18', superNet: 24, normalNet: 31 },
+  { regNo: 'SUP001', date: '2026-05-28', superNet: 20, normalNet: 22 },
+  { regNo: 'SUP001', date: '2026-06-01', superNet: 16, normalNet: 27 },
+  { regNo: 'SUP001', date: '2026-06-10', superNet: 21, normalNet: 30 },
+  { regNo: 'SUP002', date: '2026-05-12', superNet: 12, normalNet: 29 },
+  { regNo: 'SUP002', date: '2026-06-03', superNet: 15, normalNet: 25 },
+  { regNo: 'SUP003', date: '2026-05-14', superNet: 22, normalNet: 18 },
+  { regNo: 'SUP003', date: '2026-06-02', superNet: 19, normalNet: 20 },
+  { regNo: 'SUP004', date: '2026-05-16', superNet: 25, normalNet: 34 },
+  { regNo: 'SUP004', date: '2026-06-04', superNet: 20, normalNet: 28 },
+  { regNo: 'SUP005', date: '2026-05-20', superNet: 16, normalNet: 22 },
+  { regNo: 'SUP005', date: '2026-06-03', superNet: 18, normalNet: 24 },
 ]
 
 export const fertilizerTypes = [

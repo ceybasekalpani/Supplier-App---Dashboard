@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Search, ChevronDown, Package, Droplet, ShoppingBag, CheckCircle, XCircle, Clock } from 'lucide-react'
+import { Search, Package, Droplet, ShoppingBag, CheckCircle, XCircle, Clock } from 'lucide-react'
 import StatusBadge from '../components/ui/StatusBadge'
 import Avatar from '../components/ui/Avatar'
 import { suppliers, advanceRequests, fertilizerRequests, itemRequests } from '../data/mockData'
@@ -15,17 +15,27 @@ export default function Suppliers() {
     s.route.toLowerCase().includes(search.toLowerCase())
   )
 
-  // Get requests for selected supplier based on type
+  const activeMonth = new Date().toISOString().slice(0, 7)
+  const previousMonthDate = new Date()
+  previousMonthDate.setMonth(previousMonthDate.getMonth() - 1)
+  const previousMonth = previousMonthDate.toISOString().slice(0, 7)
+
+  const isActiveOrPreviousMonth = (date) => {
+    const month = date?.slice(0, 7)
+    return month === activeMonth || month === previousMonth
+  }
+
+  // Get current and previous month requests for selected supplier based on type
   const getRequestsForSupplier = () => {
     if (!selected) return []
     
     switch(requestType) {
       case 'advance':
-        return advanceRequests.filter(req => req.regNo === selected.regNo)
+        return advanceRequests.filter(req => req.regNo === selected.regNo && isActiveOrPreviousMonth(req.date))
       case 'fertilizer':
-        return fertilizerRequests.filter(req => req.regNo === selected.regNo)
+        return fertilizerRequests.filter(req => req.regNo === selected.regNo && isActiveOrPreviousMonth(req.date))
       case 'item':
-        return itemRequests.filter(req => req.regNo === selected.regNo)
+        return itemRequests.filter(req => req.regNo === selected.regNo && isActiveOrPreviousMonth(req.date))
       default:
         return []
     }
@@ -137,6 +147,9 @@ export default function Suppliers() {
               {/* Request History with Toggle Buttons */}
               <div className="border-t border-slate-100 dark:border-slate-700 pt-3">
                 <p className="text-xs font-semibold text-slate-400 uppercase mb-3">Request History</p>
+                <p className="text-[11px] text-slate-400 mb-3">
+                  Showing {previousMonth} and {activeMonth} requests
+                </p>
                 
                 {/* Toggle Buttons */}
                 <div className="flex gap-2 mb-4">
@@ -257,19 +270,19 @@ export default function Suppliers() {
                     <div>
                       <p className="text-xs text-slate-400">Advance</p>
                       <p className="text-sm font-bold text-amber-600 dark:text-amber-400">
-                        {advanceRequests.filter(r => r.regNo === selected.regNo).length}
+                        {advanceRequests.filter(r => r.regNo === selected.regNo && isActiveOrPreviousMonth(r.date)).length}
                       </p>
                     </div>
                     <div>
                       <p className="text-xs text-slate-400">Fertilizer</p>
                       <p className="text-sm font-bold text-green-600 dark:text-green-400">
-                        {fertilizerRequests.filter(r => r.regNo === selected.regNo).length}
+                        {fertilizerRequests.filter(r => r.regNo === selected.regNo && isActiveOrPreviousMonth(r.date)).length}
                       </p>
                     </div>
                     <div>
                       <p className="text-xs text-slate-400">Items</p>
                       <p className="text-sm font-bold text-purple-600 dark:text-purple-400">
-                        {itemRequests.filter(r => r.regNo === selected.regNo).length}
+                        {itemRequests.filter(r => r.regNo === selected.regNo && isActiveOrPreviousMonth(r.date)).length}
                       </p>
                     </div>
                   </div>

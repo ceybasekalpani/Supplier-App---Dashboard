@@ -4,6 +4,8 @@ import AppLayout from './components/layout/AppLayout'
 import Dashboard from './pages/Dashboard'
 import Suppliers from './pages/Suppliers'
 import Requests from './pages/Requests'
+import DisbursementManager from './pages/DisbursementManager'  // Renamed
+import DisbursementTracking from './pages/DisbursementTracking'
 import Configurations from './pages/Configurations'
 import Communication from './pages/Communication'
 import UserManagement from './pages/UserManagement'
@@ -18,6 +20,8 @@ export default function App() {
             <Route path="/"                index element={<Dashboard />} />
             <Route path="/suppliers"       element={<Suppliers />} />
             <Route path="/requests"        element={<Requests />} />
+            <Route path="/disbursements"   element={<DisbursementManager />} />  {/* Updated path and component */}
+            <Route path="/disbursement-tracking" element={<DisbursementTracking />} />
             <Route path="/configurations"  element={<Configurations />} />
             <Route path="/communication"   element={<Communication />} />
             <Route path="/user-management" element={<UserManagement />} />

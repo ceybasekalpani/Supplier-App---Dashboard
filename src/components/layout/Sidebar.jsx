@@ -2,13 +2,15 @@ import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Users, FileText, Settings2,
   MessageCircle, UserCheck, SlidersHorizontal,
-  Leaf, ChevronLeft, ChevronRight
+  Leaf, ChevronLeft, ChevronRight, Send, CheckCircle
 } from 'lucide-react'
 
 const navItems = [
   { to: '/',               label: 'Dashboard',       icon: LayoutDashboard },
   { to: '/suppliers',      label: 'Suppliers',       icon: Users           },
-  { to: '/requests',       label: 'Requests',        icon: FileText,  badge: 13 },
+  { to: '/requests',       label: 'Requests',        icon: FileText },
+  { to: '/disbursements',  label: 'Disbursements',   icon: Send },  
+  { to: '/disbursement-tracking', label: 'Disbursement Tracking', icon: CheckCircle },
   { to: '/configurations', label: 'Configurations',  icon: Settings2       },
   { to: '/communication',  label: 'Communication',   icon: MessageCircle   },
   { to: '/user-management',label: 'User Management', icon: UserCheck       },

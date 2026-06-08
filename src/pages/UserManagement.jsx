@@ -1,92 +1,291 @@
-import { Pencil, Trash2, Camera } from 'lucide-react'
-import StatusBadge from '../components/ui/StatusBadge'
-import Avatar from '../components/ui/Avatar'
-import { adminUsers, roles } from '../data/mockData'
+// UserManagement.jsx
+import React, { useState, useRef } from 'react';
+import { Pencil, Trash2, Camera, X, Search, ChevronDown } from 'lucide-react';
 
-export default function UserManagement() {
-  const activeCount = adminUsers.filter(u => u.status === 'active').length
+// Mock Data
+const ROLES = [
+  { id: 1, name: 'Super Admin' },
+  { id: 2, name: 'Admin' },
+  { id: 3, name: 'Support' },
+  { id: 4, name: 'Viewer' },
+];
+
+const INITIAL_USERS = [
+  { id: 1, name: 'Dr. Chamara Silva', email: 'chamara@agri.lk', username: 'chamara.s', password: '123456', phoneNo: '+94 77 123 4567', role: 'Super Admin', status: 'active', avatar: null, createdAt: '2024-01-15' },
+  { id: 2, name: 'Kumari Wickramasinghe', email: 'kumari@agri.lk', username: 'kumari.w', password: '123456', phoneNo: '+94 71 234 5678', role: 'Admin', status: 'active', avatar: null, createdAt: '2024-02-10' },
+  { id: 3, name: 'Nuwan Perera', email: 'nuwan@agri.lk', username: 'nuwan.p', password: '123456', phoneNo: '+94 70 345 6789', role: 'Support', status: 'inactive', avatar: null, createdAt: '2024-02-20' },
+];
+
+const StatusBadge = ({ status }) => {
+  const styles = {
+    active: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800',
+    inactive: 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400 border-rose-200 dark:border-rose-800',
+  };
+  return (
+    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize border ${styles[status]}`}>
+      {status}
+    </span>
+  );
+};
+
+const Avatar = ({ name, size = 'md', src = null }) => {
+  const initials = name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  const sizeClasses = { sm: 'w-8 h-8 text-xs', md: 'w-10 h-10 text-sm', lg: 'w-12 h-12 text-base' };
+  if (src) return <img src={src} alt={name} className={`${sizeClasses[size]} rounded-full object-cover border border-slate-200 dark:border-slate-700`} />;
+  return (
+    <div className={`${sizeClasses[size]} rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-semibold shadow-sm`}>
+      {initials}
+    </div>
+  );
+};
+
+const UserManagement = () => {
+  const [users, setUsers] = useState(INITIAL_USERS);
+  const [editingUser, setEditingUser] = useState(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [formData, setFormData] = useState({
+    fullName: '', email: '', username: '', password: '', phoneNo: '', role: 'Admin', status: 'active'
+  });
+  const [profileImage, setProfileImage] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+  const [errors, setErrors] = useState({});
+  const fileInputRef = useRef(null);
+
+  const filteredUsers = users.filter(user => {
+    const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          user.username.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = statusFilter === 'all' || user.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
+  const activeCount = users.filter(u => u.status === 'active').length;
+  const inactiveCount = users.filter(u => u.status === 'inactive').length;
+
+  const validateForm = () => {
+    const newErrors = {};
+    if (!formData.fullName.trim()) newErrors.fullName = 'Full name is required';
+    if (!formData.email.trim()) newErrors.email = 'Email is required';
+    else if (!/\S+@\S+\.\S+/.test(formData.email)) newErrors.email = 'Invalid email format';
+    if (!formData.username.trim()) newErrors.username = 'Username is required';
+    if (!editingUser && !formData.password.trim()) newErrors.password = 'Password is required';
+    else if (!editingUser && formData.password.length < 4) newErrors.password = 'Password must be at least 4 characters';
+    if (formData.phoneNo && !/^[\d\s+()-]{10,}$/.test(formData.phoneNo.replace(/\s/g, ''))) newErrors.phoneNo = 'Invalid phone number';
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      if (file.size > 2 * 1024 * 1024) return alert('Image size must be less than 2MB');
+      if (!file.type.startsWith('image/')) return alert('Only image files are allowed');
+      const reader = new FileReader();
+      reader.onloadend = () => { setImagePreview(reader.result); setProfileImage(file); };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const resetForm = () => {
+    setFormData({ fullName: '', email: '', username: '', password: '', phoneNo: '', role: 'Admin', status: 'active' });
+    setProfileImage(null); setImagePreview(null); setEditingUser(null); setErrors({});
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleSave = () => {
+    if (!validateForm()) return;
+    if (editingUser) {
+      setUsers(users.map(u => u.id === editingUser.id ? {
+        ...editingUser, name: formData.fullName, email: formData.email, username: formData.username,
+        phoneNo: formData.phoneNo, role: formData.role, status: formData.status,
+        avatar: imagePreview || editingUser.avatar
+      } : u));
+      alert('User updated successfully!');
+    } else {
+      setUsers([...users, { id: Date.now(), name: formData.fullName, email: formData.email, username: formData.username, password: formData.password, phoneNo: formData.phoneNo, role: formData.role, status: formData.status, avatar: imagePreview || null, createdAt: new Date().toISOString() }]);
+      alert('User created successfully!');
+    }
+    resetForm();
+  };
+
+  const handleEdit = (user) => {
+    setEditingUser(user);
+    setFormData({ fullName: user.name, email: user.email, username: user.username, password: '', phoneNo: user.phoneNo || '', role: user.role, status: user.status });
+    setImagePreview(user.avatar || null); setProfileImage(null); setErrors({});
+  };
+
+  const handleDelete = () => {
+    setUsers(users.filter(u => u.id !== showDeleteConfirm));
+    setShowDeleteConfirm(null);
+    if (editingUser?.id === showDeleteConfirm) resetForm();
+    alert('User deleted successfully!');
+  };
+
+  const getRoleColor = (role) => ({
+    'Super Admin': 'text-amber-600 dark:text-amber-400',
+    'Admin': 'text-blue-600 dark:text-blue-400',
+    'Support': 'text-emerald-600 dark:text-emerald-400',
+    'Viewer': 'text-slate-600 dark:text-slate-400'
+  }[role] || 'text-slate-600');
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h2 className="text-xl font-bold text-slate-900 dark:text-white">User Management</h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Manage administrators and access roles</p>
-      </div>
-
-      <div className="grid grid-cols-3 gap-4">
-        {[{ l: 'Total Admins', v: adminUsers.length, c: 'text-slate-900 dark:text-white' },
-          { l: 'Active', v: activeCount, c: 'text-green-600 dark:text-green-400' },
-          { l: 'Inactive', v: adminUsers.length - activeCount, c: 'text-red-600 dark:text-red-400' }].map(s => (
-          <div key={s.l} className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
-            <p className="text-xs text-slate-400 mb-1">{s.l}</p>
-            <p className={`text-2xl font-bold ${s.c}`}>{s.v}</p>
-          </div>
-        ))}
-      </div>
-
-      <div className="flex gap-4 items-start">
-        <div className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead><tr className="border-b border-slate-200 dark:border-slate-700">
-                {['Administrator', 'Role', 'Status', 'Actions'].map(h => (
-                  <th key={h} className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wide py-3 px-4">{h}</th>
-                ))}
-              </tr></thead>
-              <tbody>
-                {adminUsers.map(u => (
-                  <tr key={u.id} className="border-b border-slate-50 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30">
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-2.5">
-                        <Avatar name={u.name} size="sm" />
-                        <div>
-                          <p className="font-semibold text-slate-700 dark:text-slate-300">{u.name}</p>
-                          <p className="text-xs text-slate-400">{u.email}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className="text-xs font-bold text-purple-600 dark:text-purple-400">{u.role}</span>
-                    </td>
-                    <td className="py-3 px-4"><StatusBadge status={u.status} /></td>
-                    <td className="py-3 px-4"><div className="flex gap-1">
-                      <button className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-600 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-700"><Pencil size={12} /></button>
-                      <button className="p-1.5 rounded-lg border border-red-200 dark:border-red-900/40 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"><Trash2 size={12} /></button>
-                    </div></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+    <div className="p-6 bg-slate-50 dark:bg-slate-900 min-h-screen">
+      <div className="max-w-7xl mx-auto space-y-6">
+        {/* Header */}
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">User Management</h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Manage system administrators and their access roles</p>
           </div>
         </div>
 
-        <div className="w-80 flex-shrink-0 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4 space-y-3">
-          <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">Create User</p>
-          <div className="flex justify-center">
-            <button className="w-20 h-20 rounded-full border-2 border-dashed border-slate-200 dark:border-slate-600 flex items-center justify-center text-slate-400 hover:border-green-400 hover:text-green-500 transition-colors">
-              <Camera size={22} />
-            </button>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            {[['Full Name', 'text', 'John Doe'], ['Email', 'email', 'email@factory.lk'], ['Username', 'text', 'username'], ['Password', 'password', '••••••'], ['Phone No', 'tel', '+94 77 000 0000']].map(([l, type, ph]) => (
-              <div key={l} className={l === 'Full Name' || l === 'Email' ? 'col-span-2' : ''}>
-                <label className="text-xs font-semibold text-slate-400 uppercase block mb-1.5">{l}</label>
-                <input type={type} placeholder={ph} className="w-full bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-700 dark:text-slate-300 outline-none focus:border-green-400" />
+        {/* Stats Cards */}
+        <div className="grid grid-cols-3 gap-5">
+          {[
+            { label: 'Total Administrators', value: users.length, color: 'from-slate-500 to-slate-600', textColor: 'text-slate-900 dark:text-white' },
+            { label: 'Active Users', value: activeCount, color: 'from-emerald-500 to-teal-600', textColor: 'text-emerald-600 dark:text-emerald-400' },
+            { label: 'Inactive Users', value: inactiveCount, color: 'from-rose-500 to-red-600', textColor: 'text-rose-600 dark:text-rose-400' },
+          ].map((stat, idx) => (
+            <div key={idx} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-5">
+              <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">{stat.label}</p>
+              <p className={`text-3xl font-bold mt-2 ${stat.textColor}`}>{stat.value}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Main Content: Table + Form */}
+        <div className="flex gap-6 flex-wrap lg:flex-nowrap">
+          {/* Users Table Section */}
+          <div className="flex-1 min-w-0 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+            <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex flex-wrap gap-3 justify-between items-center">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input type="text" placeholder="Search by name, email or username..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-9 pr-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-white w-64 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500" />
               </div>
-            ))}
-            <div>
-              <label className="text-xs font-semibold text-slate-400 uppercase block mb-1.5">Role</label>
-              <select className="w-full bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-700 dark:text-slate-300 outline-none focus:border-green-400">
-                {roles.map(r => <option key={r.id}>{r.name}</option>)}
-              </select>
+              <div className="flex gap-2">
+                <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
+                  <option value="all">All Status</option>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Administrator</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Role</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
+                    <th className="text-right py-3 px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                  {filteredUsers.map(user => (
+                    <tr key={user.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-3">
+                          <Avatar name={user.name} size="sm" src={user.avatar} />
+                          <div>
+                            <p className="font-medium text-slate-900 dark:text-white">{user.name}</p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">{user.email}</p>
+                            {user.phoneNo && <p className="text-xs text-slate-400 mt-0.5">{user.phoneNo}</p>}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4"><span className={`text-xs font-bold ${getRoleColor(user.role)}`}>{user.role}</span></td>
+                      <td className="py-3 px-4"><StatusBadge status={user.status} /></td>
+                      <td className="py-3 px-4 text-right">
+                        <div className="flex justify-end gap-2">
+                          <button onClick={() => handleEdit(user)} className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"><Pencil size={14} /></button>
+                          <button onClick={() => setShowDeleteConfirm(user.id)} className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-colors"><Trash2 size={14} /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {filteredUsers.length === 0 && <tr><td colSpan="4" className="py-12 text-center text-slate-500 dark:text-slate-400">No users found</td></tr>}
+                </tbody>
+              </table>
             </div>
           </div>
-          <div className="flex gap-2 pt-1">
-            <button className="flex-1 py-2 text-sm font-semibold rounded-lg border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700">Discard</button>
-            <button className="flex-1 py-2 text-sm font-semibold rounded-lg bg-green-500 text-white hover:bg-green-600">Save</button>
+
+          {/* Create/Edit Form Section */}
+          <div className="w-96 flex-shrink-0 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-5 space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-700 pb-3">
+              <h3 className="font-semibold text-slate-900 dark:text-white">{editingUser ? 'Edit User' : 'Create New User'}</h3>
+              {editingUser && <button onClick={resetForm} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>}
+            </div>
+
+            {/* Avatar Upload */}
+            <div className="flex justify-center">
+              <div className="relative">
+                <button onClick={() => fileInputRef.current?.click()} className="w-24 h-24 rounded-full border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center text-slate-400 hover:border-emerald-500 hover:text-emerald-500 transition-colors overflow-hidden bg-slate-50 dark:bg-slate-700/30">
+                  {imagePreview ? <img src={imagePreview} alt="Profile" className="w-full h-full object-cover" /> : <Camera size={28} />}
+                </button>
+                {imagePreview && <button onClick={() => { setImagePreview(null); setProfileImage(null); if(fileInputRef.current) fileInputRef.current.value = ''; }} className="absolute -top-1 -right-1 bg-rose-500 text-white rounded-full p-0.5"><X size={12} /></button>}
+                <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+              </div>
+            </div>
+
+            {/* Form Fields */}
+            <div className="space-y-3">
+              {['fullName', 'email', 'username', 'password', 'phoneNo'].map((field) => {
+                const isPassword = field === 'password';
+                const label = { fullName: 'Full Name', email: 'Email Address', username: 'Username', password: 'Password', phoneNo: 'Phone Number' }[field];
+                const required = field !== 'phoneNo';
+                const showField = !(isPassword && editingUser);
+                if (!showField) return null;
+                return (
+                  <div key={field}>
+                    <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">{label} {required && <span className="text-rose-500">*</span>}</label>
+                    <input type={isPassword ? 'password' : 'text'} name={field} value={formData[field]} onChange={(e) => setFormData(prev => ({ ...prev, [field]: e.target.value }))} placeholder={`Enter ${label.toLowerCase()}`} className={`w-full px-3 py-2 border ${errors[field] ? 'border-rose-500' : 'border-slate-300 dark:border-slate-600'} rounded-lg text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500`} />
+                    {errors[field] && <p className="text-xs text-rose-500 mt-1">{errors[field]}</p>}
+                  </div>
+                );
+              })}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Role</label>
+                  <select value={formData.role} onChange={(e) => setFormData(prev => ({ ...prev, role: e.target.value }))} className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500/20">
+                    {ROLES.map(role => <option key={role.id} value={role.name}>{role.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Status</label>
+                  <select value={formData.status} onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value }))} className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500/20">
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Buttons */}
+            <div className="flex gap-3 pt-2">
+              <button onClick={resetForm} className="flex-1 py-2 text-sm font-medium rounded-lg border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">{editingUser ? 'Cancel' : 'Discard'}</button>
+              <button onClick={handleSave} className="flex-1 py-2 text-sm font-medium rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors shadow-sm">{editingUser ? 'Update User' : 'Create User'}</button>
+            </div>
           </div>
         </div>
+
+        {/* Delete Modal */}
+        {showDeleteConfirm && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white dark:bg-slate-800 rounded-xl max-w-md w-full p-6 shadow-xl">
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Confirm Deletion</h3>
+              <p className="text-slate-600 dark:text-slate-400 mt-2">Are you sure you want to delete this user? This action cannot be undone.</p>
+              <div className="flex gap-3 mt-6">
+                <button onClick={() => setShowDeleteConfirm(null)} className="flex-1 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700">Cancel</button>
+                <button onClick={handleDelete} className="flex-1 py-2 bg-rose-600 text-white rounded-lg hover:bg-rose-700">Delete</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
-  )
-}
+  );
+};
+
+export default UserManagement;

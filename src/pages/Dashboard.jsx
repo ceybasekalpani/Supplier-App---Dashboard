@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom'
 import { Users, Banknote, Sprout, Package, Zap } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import StatCard from '../components/ui/StatCard'
@@ -6,6 +7,12 @@ import Avatar from '../components/ui/Avatar'
 import { chartData, activities } from '../data/mockData'
 
 export default function Dashboard() {
+  const navigate = useNavigate()
+
+  const handleQuickAction = (type) => {
+    navigate(`/requests?tab=${type}&filter=pending`)
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -45,22 +52,47 @@ export default function Dashboard() {
             <Zap size={15} /> Quick Actions
           </p>
           <div className="space-y-2">
-            {[
-              { label: 'Approve Advance Payments',   count: 9,  bg: 'bg-amber-50 dark:bg-amber-900/20',  icon: Banknote, iconCls: 'text-amber-500'  },
-              { label: 'Approve Fertilizer Requests',count: 6,  bg: 'bg-blue-50 dark:bg-blue-900/20',    icon: Sprout,   iconCls: 'text-blue-500'   },
-              { label: 'Approve Item Requests',      count: 4,  bg: 'bg-purple-50 dark:bg-purple-900/20',icon: Package,  iconCls: 'text-purple-500' },
-            ].map(({ label, count, bg, icon: Icon, iconCls }) => (
-              <button key={label} className={`w-full flex items-center gap-3 p-3 rounded-lg ${bg} hover:opacity-80 transition text-left`}>
-                <div className={`w-9 h-9 rounded-lg bg-white dark:bg-slate-700 flex items-center justify-center ${iconCls} flex-shrink-0`}>
-                  <Icon size={17} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold text-slate-700 dark:text-slate-200 truncate">{label}</p>
-                  <p className="text-[10px] text-slate-400">{count} pending</p>
-                </div>
-                <span className="text-xs font-bold px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 rounded-full">{count}</span>
-              </button>
-            ))}
+            <button 
+              onClick={() => handleQuickAction('advance')}
+              className="w-full flex items-center gap-3 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 hover:opacity-80 transition text-left group"
+            >
+              <div className="w-9 h-9 rounded-lg bg-white dark:bg-slate-700 flex items-center justify-center text-amber-500 shrink-0 group-hover:scale-105 transition-transform">
+                <Banknote size={17} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-slate-700 dark:text-slate-200 truncate">Approve Advance Payments</p>
+                <p className="text-[10px] text-slate-400">9 pending requests</p>
+              </div>
+              <span className="text-xs font-bold px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 rounded-full">9</span>
+            </button>
+            
+            <button 
+              onClick={() => handleQuickAction('fertilizer')}
+              className="w-full flex items-center gap-3 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 hover:opacity-80 transition text-left group"
+            >
+              <div className="w-9 h-9 rounded-lg bg-white dark:bg-slate-700 flex items-center justify-center text-blue-500 shrink-0 group-hover:scale-105 transition-transform">
+                <Sprout size={17} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-slate-700 dark:text-slate-200 truncate">Approve Fertilizer Requests</p>
+                <p className="text-[10px] text-slate-400">6 pending requests</p>
+              </div>
+              <span className="text-xs font-bold px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded-full">6</span>
+            </button>
+            
+            <button 
+              onClick={() => handleQuickAction('items')}
+              className="w-full flex items-center gap-3 p-3 rounded-lg bg-purple-50 dark:bg-purple-900/20 hover:opacity-80 transition text-left group"
+            >
+              <div className="w-9 h-9 rounded-lg bg-white dark:bg-slate-700 flex items-center justify-center text-purple-500 shrink-0 group-hover:scale-105 transition-transform">
+                <Package size={17} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-slate-700 dark:text-slate-200 truncate">Approve Item Requests</p>
+                <p className="text-[10px] text-slate-400">4 pending requests</p>
+              </div>
+              <span className="text-xs font-bold px-1.5 py-0.5 bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 rounded-full">4</span>
+            </button>
           </div>
         </div>
       </div>
