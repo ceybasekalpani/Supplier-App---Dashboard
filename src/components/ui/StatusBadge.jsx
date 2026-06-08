@@ -1,16 +1,34 @@
-import { colors } from '../../theme/colors'
+import { useTheme } from '../../context/useTheme'
+import { hexToRgba } from '../../theme/colors'
 
-const variants = {
-  ...colors.statusClass,
-  draft: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
-  expired: colors.statusClass.rejected,
-  delivered: 'bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-300',
-  failed: colors.statusClass.rejected,
+const statusColorKey = {
+  active: 'success',
+  approved: 'success',
+  completed: 'success',
+  delivered: 'success',
+  pending: 'warning',
+  awaiting: 'warning',
+  scheduled: 'info',
+  draft: 'info',
+  inactive: 'disabled',
+  rejected: 'error',
+  expired: 'error',
+  failed: 'error',
 }
 
 export default function StatusBadge({ status }) {
+  const { theme } = useTheme()
+  const color = theme[statusColorKey[status] || 'disabled']
+
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold capitalize ${variants[status] ?? variants.inactive}`}>
+    <span
+      className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold capitalize border"
+      style={{
+        backgroundColor: hexToRgba(color, 0.14),
+        borderColor: hexToRgba(color, 0.28),
+        color,
+      }}
+    >
       {status}
     </span>
   )

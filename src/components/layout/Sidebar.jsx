@@ -19,17 +19,20 @@ const navItems = [
 
 export default function Sidebar({ collapsed, onToggle }) {
   return (
-    <aside className={`fixed top-0 left-0 bottom-0 z-50 flex flex-col bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-700 transition-all duration-300 ${collapsed ? 'w-[60px]' : 'w-[240px]'}`}>
+    <aside
+      className={`fixed top-0 left-0 bottom-0 z-50 flex flex-col border-r transition-all duration-300 ${collapsed ? 'w-[60px]' : 'w-[240px]'}`}
+      style={{ backgroundColor: 'var(--theme-card)', borderColor: 'var(--theme-border)' }}
+    >
 
       {/* Logo */}
-      <div className="flex items-center gap-3 px-4 py-5 border-b border-slate-200 dark:border-slate-700">
-        <div className="w-8 h-8 rounded-lg bg-green-500 flex items-center justify-center flex-shrink-0">
+      <div className="flex items-center gap-3 px-4 py-5 border-b" style={{ borderColor: 'var(--theme-border)' }}>
+        <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: 'var(--theme-primary)' }}>
           <Leaf size={16} className="text-white" />
         </div>
         {!collapsed && (
           <div className="overflow-hidden">
-            <p className="text-sm font-bold text-slate-900 dark:text-white leading-tight">Tea Factory</p>
-            <p className="text-[10px] text-slate-400">Admin Panel</p>
+            <p className="text-sm font-bold leading-tight" style={{ color: 'var(--theme-text)' }}>Tea Factory</p>
+            <p className="text-[10px]" style={{ color: 'var(--theme-textMuted)' }}>Admin Panel</p>
           </div>
         )}
       </div>
@@ -44,10 +47,14 @@ export default function Sidebar({ collapsed, onToggle }) {
             className={({ isActive }) =>
               `flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm font-medium transition-colors group relative
                ${isActive
-                 ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400'
-                 : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                 ? 'text-white'
+                 : 'hover:bg-slate-100 dark:hover:bg-slate-800'
                }`
             }
+            style={({ isActive }) => ({
+              backgroundColor: isActive ? 'var(--theme-primary)' : 'transparent',
+              color: isActive ? 'var(--theme-white)' : 'var(--theme-textSecondary)',
+            })}
           >
             <Icon size={18} className="flex-shrink-0" />
             {!collapsed && <span className="flex-1 truncate">{label}</span>}
@@ -64,10 +71,11 @@ export default function Sidebar({ collapsed, onToggle }) {
       </nav>
 
       {/* Collapse toggle */}
-      <div className="p-2 border-t border-slate-200 dark:border-slate-700">
+      <div className="p-2 border-t" style={{ borderColor: 'var(--theme-border)' }}>
         <button
           onClick={onToggle}
-          className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          style={{ color: 'var(--theme-textSecondary)' }}
         >
           {collapsed ? <ChevronRight size={18} /> : <><ChevronLeft size={18} /><span>Collapse</span></>}
         </button>

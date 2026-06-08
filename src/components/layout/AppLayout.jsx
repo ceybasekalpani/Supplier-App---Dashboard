@@ -19,7 +19,7 @@ export default function AppLayout() {
   const title = pageTitles[location.pathname] ?? 'Dashboard'
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex">
+    <div className="min-h-screen flex" style={{ backgroundColor: 'var(--theme-bg)', color: 'var(--theme-text)' }}>
       <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(c => !c)} />
       <div className={`flex-1 flex flex-col transition-all duration-300 ${collapsed ? 'ml-[60px]' : 'ml-[240px]'}`}>
         <Topbar pageTitle={title} />

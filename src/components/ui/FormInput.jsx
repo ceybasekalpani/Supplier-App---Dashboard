@@ -11,7 +11,7 @@ export default function FormInput({
 }) {
   return (
     <label className="block">
-      <span className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
+      <span className="block text-xs font-medium mb-1" style={{ color: 'var(--theme-textSecondary)' }}>
         {label} {required && <span className="text-rose-500">*</span>}
       </span>
       <input
@@ -21,11 +21,15 @@ export default function FormInput({
         disabled={disabled}
         onChange={onChange}
         placeholder={placeholder}
-        className={`w-full px-3 py-2 border rounded-lg text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 disabled:opacity-70 ${
-          error ? 'border-rose-500' : 'border-slate-300 dark:border-slate-600'
-        }`}
+        className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 disabled:opacity-70"
+        style={{
+          backgroundColor: 'var(--theme-inputBg)',
+          borderColor: error ? 'var(--theme-error)' : 'var(--theme-border)',
+          color: 'var(--theme-text)',
+          '--tw-ring-color': 'color-mix(in srgb, var(--theme-primary) 20%, transparent)',
+        }}
       />
-      {error && <p className="text-xs text-rose-500 mt-1">{error}</p>}
+      {error && <p className="text-xs mt-1" style={{ color: 'var(--theme-error)' }}>{error}</p>}
     </label>
   )
 }

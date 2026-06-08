@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   Search, Check, X, Eye, Inbox, Info, User, Landmark,
   TreePine, Leaf, Pencil, WalletCards, Banknote,
@@ -31,6 +32,14 @@ const tabs = [
   { id: 'fertilizer', label: 'Fertilizer Requests', icon: Sprout },
   { id: 'items', label: 'Item Requests', icon: Package },
 ]
+
+const validTabs = tabs.map(tab => tab.id)
+const validFilters = ['all', 'pending', 'approved', 'rejected']
+
+function getInitialQueryValue(searchParams, key, allowedValues, fallback) {
+  const value = searchParams.get(key)
+  return allowedValues.includes(value) ? value : fallback
+}
 
 const tabActiveClass = {
   advance: 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 shadow-sm',
@@ -612,8 +621,9 @@ function SidePanel({
 }
 
 export default function Requests() {
-  const [tab, setTab] = useState('advance')
-  const [filter, setFilter] = useState('all')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [tab, setTab] = useState(() => getInitialQueryValue(searchParams, 'tab', validTabs, 'advance'))
+  const [filter, setFilter] = useState(() => getInitialQueryValue(searchParams, 'filter', validFilters, 'all'))
   const [search, setSearch] = useState('')
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
@@ -672,6 +682,7 @@ export default function Requests() {
 
   function resetFiltersForTab(nextTab) {
     setTab(nextTab)
+    setSearchParams({})
     setSelectedId(null)
     setDraft({})
     setFilter('all')

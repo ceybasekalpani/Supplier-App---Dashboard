@@ -1,22 +1,118 @@
-export const colors = {
-  brand: {
-    primary: 'green',
-    success: 'emerald',
-    warning: 'amber',
-    danger: 'rose',
-    info: 'sky',
+export const themes = {
+  light: {
+    bg: '#F8FAFC',
+    card: '#FFFFFF',
+    cardBorder: '#E5E7EB',
+    surface: '#F3F4F6',
+    primary: '#2E7D32',
+    primaryLight: '#4CAF50',
+    primaryDark: '#1B5E20',
+    accent: '#795548',
+    text: '#212121',
+    textSecondary: '#757575',
+    textMuted: '#9E9E9E',
+    border: '#E5E7EB',
+    success: '#388E3C',
+    warning: '#FFA000',
+    error: '#B71C1C',
+    info: '#0288D1',
+    white: '#FFFFFF',
+    inputBg: '#F9FAFB',
+    statusBar: 'dark-content',
+    tabBar: '#FFFFFF',
+    shadow: '#10182812',
+    disabled: '#BDBDBD',
+    placeholder: '#9E9E9E',
+    backdrop: 'rgba(0,0,0,0.5)',
+    notification: '#F57C00',
+    secondary: '#FF8F00',
   },
-  statusClass: {
-    active: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
-    inactive: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400',
-    pending: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
-    approved: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
-    rejected: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
-    completed: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
-    awaiting: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300',
+  dark: {
+    bg: '#121212',
+    card: '#242424',
+    cardBorder: '#333333',
+    surface: '#1E1E1E',
+    primary: '#66BB6A',
+    primaryLight: '#81C784',
+    primaryDark: '#388E3C',
+    accent: '#8D6E63',
+    text: '#FFFFFF',
+    textSecondary: '#B0B0B0',
+    textMuted: '#9E9E9E',
+    border: '#333333',
+    success: '#4CAF50',
+    warning: '#FFB74D',
+    error: '#EF5350',
+    info: '#4FC3F7',
+    white: '#f5f5f5',
+    inputBg: '#252525',
+    statusBar: 'light-content',
+    tabBar: '#242424',
+    shadow: '#00000080',
+    disabled: '#757575',
+    placeholder: '#9E9E9E',
+    backdrop: 'rgba(0,0,0,0.8)',
+    notification: '#FFA726',
+    secondary: '#FFB74D',
   },
-  surface: {
-    card: 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700',
-    muted: 'bg-slate-50 dark:bg-slate-900/50',
+}
+
+export const fontSizes = {
+  small: {
+    xs: 10,
+    sm: 12,
+    base: 13,
+    md: 15,
+    lg: 17,
+    xl: 20,
+    '2xl': 23,
+    '3xl': 27,
   },
+  medium: {
+    xs: 11,
+    sm: 13,
+    base: 15,
+    md: 17,
+    lg: 19,
+    xl: 22,
+    '2xl': 26,
+    '3xl': 32,
+  },
+  large: {
+    xs: 13,
+    sm: 15,
+    base: 17,
+    md: 20,
+    lg: 23,
+    xl: 27,
+    '2xl': 31,
+    '3xl': 38,
+  },
+}
+
+export const getThemeColors = (isDarkMode) => {
+  return isDarkMode ? themes.dark : themes.light
+}
+
+const BASE_FONT_SIZES = { xs: 11, sm: 13, base: 15, md: 17, lg: 19, xl: 22, '2xl': 26, '3xl': 32 }
+
+export function getScaledFontSizes(value) {
+  const scale = 0.70 + ((value - 10) / 90) * 0.65
+  const result = {}
+
+  for (const key in BASE_FONT_SIZES) {
+    result[key] = Math.max(8, Math.round(BASE_FONT_SIZES[key] * scale))
+  }
+
+  return result
+}
+
+export const hexToRgba = (hex, alpha = 1) => {
+  const normalized = hex.replace('#', '')
+  const bigint = parseInt(normalized, 16)
+  const red = (bigint >> 16) & 255
+  const green = (bigint >> 8) & 255
+  const blue = bigint & 255
+
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`
 }

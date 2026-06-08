@@ -1,8 +1,125 @@
 import { useState } from 'react'
-import { Pencil, Trash2, Send } from 'lucide-react'
+import {
+  Bell,
+  CalendarDays,
+  Check,
+  Clock,
+  Edit3,
+  Megaphone,
+  MessageSquare,
+  Newspaper,
+  Pencil,
+  Send,
+  Trash2,
+  X,
+} from 'lucide-react'
+import PageHeader from '../components/ui/PageHeader'
 import StatusBadge from '../components/ui/StatusBadge'
 import Toggle from '../components/ui/Toggle'
 import { newsItems as initialNewsItems, notifications as initialNotifications } from '../data/mockData'
+
+const tabs = [
+  { id: 'news', label: 'News', icon: Newspaper },
+  { id: 'notifications', label: 'Notifications', icon: Bell },
+]
+
+const newsFilters = ['all', 'active', 'draft', 'expired']
+const notificationFilters = ['all', 'scheduled', 'delivered', 'failed']
+
+const statusTone = {
+  draft: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-900/40',
+  expired: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-300 dark:border-red-900/40',
+  failed: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-300 dark:border-red-900/40',
+  all: 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-900 dark:text-slate-300 dark:border-slate-700',
+}
+
+const themedPrimary = {
+  backgroundColor: 'var(--theme-primary)',
+  color: 'var(--theme-white)',
+}
+
+const themedPrimarySoft = {
+  backgroundColor: 'color-mix(in srgb, var(--theme-primary) 12%, transparent)',
+  borderColor: 'color-mix(in srgb, var(--theme-primary) 28%, var(--theme-border))',
+  color: 'var(--theme-primary)',
+}
+
+const themedPrimaryBorder = {
+  borderColor: 'color-mix(in srgb, var(--theme-primary) 28%, var(--theme-border))',
+}
+
+const themedInput = {
+  borderColor: 'var(--theme-border)',
+  '--tw-ring-color': 'color-mix(in srgb, var(--theme-primary) 20%, transparent)',
+}
+
+function getTodayDate() {
+  const today = new Date()
+  const year = today.getFullYear()
+  const month = String(today.getMonth() + 1).padStart(2, '0')
+  const day = String(today.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function getCurrentDateTime() {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  const hours = String(now.getHours()).padStart(2, '0')
+  const minutes = String(now.getMinutes()).padStart(2, '0')
+  return `${year}-${month}-${day}T${hours}:${minutes}`
+}
+
+function countStatus(items, status) {
+  return status === 'all' ? items.length : items.filter(item => item.status === status).length
+}
+
+function FilterButton({ filter, activeFilter, count, onClick }) {
+  const isActive = filter === activeFilter
+  const themedStatuses = ['active', 'scheduled', 'delivered']
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold capitalize transition-colors ${
+        isActive && !themedStatuses.includes(filter) ? statusTone[filter] : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700'
+      }`}
+      style={isActive && themedStatuses.includes(filter) ? themedPrimarySoft : undefined}
+    >
+      {filter}
+      <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${isActive ? 'bg-white/50 dark:bg-slate-900/30' : 'bg-slate-100 dark:bg-slate-900'}`}>
+        {count}
+      </span>
+    </button>
+  )
+}
+
+function EmptyState({ icon: Icon, title, description }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-14 text-center">
+      <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-xl bg-slate-100 text-slate-400 dark:bg-slate-700">
+        <Icon size={24} />
+      </div>
+      <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{title}</p>
+      <p className="mt-1 text-xs text-slate-400">{description}</p>
+    </div>
+  )
+}
+
+function NotificationStatus({ status }) {
+  const usePrimary = status === 'scheduled' || status === 'delivered'
+
+  return (
+    <span
+      className={`inline-flex rounded-full border px-2 py-1 text-xs font-semibold capitalize ${usePrimary ? '' : statusTone[status] || statusTone.all}`}
+      style={usePrimary ? themedPrimarySoft : undefined}
+    >
+      {status}
+    </span>
+  )
+}
 
 export default function Communication() {
   const [tab, setTab] = useState('news')
@@ -11,472 +128,346 @@ export default function Communication() {
   const [active, setActive] = useState(true)
   const [newsItems, setNewsItems] = useState(initialNewsItems)
   const [notifications, setNotifications] = useState(initialNotifications)
-  
-  // Form states for news
-  const [newsForm, setNewsForm] = useState({
-    title: '',
-    description: '',
-    expiryDate: ''
-  })
-  
-  // Form states for notifications
-  const [notifForm, setNotifForm] = useState({
-    title: '',
-    message: '',
-    schedule: ''
-  })
-  
-  // Edit states
+  const [newsForm, setNewsForm] = useState({ title: '', description: '', expiryDate: '' })
+  const [notifForm, setNotifForm] = useState({ title: '', message: '', schedule: '' })
   const [editingNews, setEditingNews] = useState(null)
   const [editingNotif, setEditingNotif] = useState(null)
-  
-  // Toast/Alert state
   const [toast, setToast] = useState(null)
-  
+
+  const filteredNews = newsItems.filter(item => newsFilter === 'all' || item.status === newsFilter)
+  const filteredNotifications = notifications.filter(item => notifFilter === 'all' || item.status === notifFilter)
+  const activeTab = tabs.find(item => item.id === tab)
+  const ActiveTabIcon = activeTab.icon
+
   const showToast = (message, type = 'success') => {
     setToast({ message, type })
     setTimeout(() => setToast(null), 3000)
   }
-  
-  const filtered = newsItems.filter(n => newsFilter === 'all' || n.status === newsFilter)
-  
-  // Filter notifications based on status
-  const filteredNotifications = notifications.filter(n => {
-    if (notifFilter === 'all') return true
-    return n.status === notifFilter
-  })
-  
-  // Get today's date in YYYY-MM-DD format for min date attribute
-  const getTodayDate = () => {
-    const today = new Date()
-    const year = today.getFullYear()
-    const month = String(today.getMonth() + 1).padStart(2, '0')
-    const day = String(today.getDate()).padStart(2, '0')
-    return `${year}-${month}-${day}`
+
+  const simulateSendNotification = () => (Math.random() < 0.9 ? 'delivered' : 'failed')
+
+  const handleDiscard = () => {
+    setEditingNews(null)
+    setEditingNotif(null)
+    setNewsForm({ title: '', description: '', expiryDate: '' })
+    setNotifForm({ title: '', message: '', schedule: '' })
+    setActive(true)
   }
-  
-  // Get current datetime for datetime-local min attribute
-  const getCurrentDateTime = () => {
-    const now = new Date()
-    const year = now.getFullYear()
-    const month = String(now.getMonth() + 1).padStart(2, '0')
-    const day = String(now.getDate()).padStart(2, '0')
-    const hours = String(now.getHours()).padStart(2, '0')
-    const minutes = String(now.getMinutes()).padStart(2, '0')
-    return `${year}-${month}-${day}T${hours}:${minutes}`
+
+  const handleTabChange = (nextTab) => {
+    setTab(nextTab)
+    handleDiscard()
   }
-  
-  // Simulate sending notification with random success/failure
-  const simulateSendNotification = () => {
-    // 90% success rate for realistic behavior
-    const isSuccess = Math.random() < 0.9
-    return isSuccess ? 'delivered' : 'failed'
-  }
-  
-  // News CRUD operations
+
   const handleCreateNews = () => {
     if (!newsForm.title.trim() || !newsForm.description.trim()) {
-      showToast('Please fill in all required fields', 'error')
+      showToast('Please fill in all required fields.', 'error')
       return
     }
-    
-    // Validate expiry date is not in the past
+
     if (newsForm.expiryDate && newsForm.expiryDate < getTodayDate()) {
-      showToast('Expiry date cannot be in the past', 'error')
+      showToast('Expiry date cannot be in the past.', 'error')
       return
     }
-    
+
     const newNews = {
       id: Date.now(),
-      title: newsForm.title,
-      description: newsForm.description,
-      created: new Date().toLocaleDateString(),
+      title: newsForm.title.trim(),
+      description: newsForm.description.trim(),
+      created: getTodayDate(),
       expiry: newsForm.expiryDate || 'No expiry',
-      status: active ? 'active' : 'draft'
+      status: active ? 'active' : 'draft',
     }
-    
-    setNewsItems([newNews, ...newsItems])
+
+    setNewsItems(prev => [newNews, ...prev])
     setNewsForm({ title: '', description: '', expiryDate: '' })
     setActive(true)
-    showToast('News created successfully!', 'success')
+    showToast('News created successfully.')
   }
-  
+
   const handleEditNews = (news) => {
     if (news.status === 'expired') {
-      showToast('Cannot edit expired news', 'error')
+      showToast('Cannot edit expired news.', 'error')
       return
     }
+
     setEditingNews(news)
     setNewsForm({
       title: news.title,
       description: news.description,
-      expiryDate: news.expiry !== 'No expiry' ? news.expiry : ''
+      expiryDate: news.expiry !== 'No expiry' ? news.expiry : '',
     })
     setActive(news.status === 'active')
   }
-  
+
   const handleUpdateNews = () => {
     if (!newsForm.title.trim() || !newsForm.description.trim()) {
-      showToast('Please fill in all required fields', 'error')
+      showToast('Please fill in all required fields.', 'error')
       return
     }
-    
-    // Validate expiry date is not in the past
+
     if (newsForm.expiryDate && newsForm.expiryDate < getTodayDate()) {
-      showToast('Expiry date cannot be in the past', 'error')
+      showToast('Expiry date cannot be in the past.', 'error')
       return
     }
-    
-    setNewsItems(newsItems.map(item => 
-      item.id === editingNews.id 
+
+    setNewsItems(prev => prev.map(item =>
+      item.id === editingNews.id
         ? {
             ...item,
-            title: newsForm.title,
-            description: newsForm.description,
+            title: newsForm.title.trim(),
+            description: newsForm.description.trim(),
             expiry: newsForm.expiryDate || 'No expiry',
-            status: active ? 'active' : 'draft'
+            status: active ? 'active' : 'draft',
           }
         : item
     ))
-    
-    setEditingNews(null)
-    setNewsForm({ title: '', description: '', expiryDate: '' })
-    setActive(true)
-    showToast('News updated successfully!', 'success')
+
+    handleDiscard()
+    showToast('News updated successfully.')
   }
-  
+
   const handleDeleteNews = (id, status) => {
-    if (status === 'expired') {
-      if (window.confirm('This news is expired. Do you still want to delete it?')) {
-        setNewsItems(newsItems.filter(item => item.id !== id))
-        showToast('Expired news deleted', 'success')
-      }
-    } else if (window.confirm('Are you sure you want to delete this news?')) {
-      setNewsItems(newsItems.filter(item => item.id !== id))
-      showToast('News deleted successfully', 'success')
+    const message = status === 'expired'
+      ? 'This news is expired. Do you still want to delete it?'
+      : 'Are you sure you want to delete this news?'
+
+    if (window.confirm(message)) {
+      setNewsItems(prev => prev.filter(item => item.id !== id))
+      showToast(status === 'expired' ? 'Expired news deleted.' : 'News deleted successfully.')
     }
   }
-  
-  // Notifications CRUD operations
+
   const handleSendNotification = () => {
     if (!notifForm.title.trim() || !notifForm.message.trim()) {
-      showToast('Please fill in title and message', 'error')
+      showToast('Please fill in title and message.', 'error')
       return
     }
-    
-    // Validate schedule is not in the past for notifications
+
     if (notifForm.schedule) {
       const scheduleDate = new Date(notifForm.schedule)
-      const now = new Date()
-      if (scheduleDate < now) {
-        showToast('Schedule date cannot be in the past', 'error')
+      if (scheduleDate < new Date()) {
+        showToast('Schedule date cannot be in the past.', 'error')
         return
       }
     }
-    
-    // Simulate sending notification
+
     const deliveryStatus = simulateSendNotification()
-    const scheduledDateTime = notifForm.schedule 
+    const scheduledDateTime = notifForm.schedule
       ? new Date(notifForm.schedule).toLocaleString()
       : new Date().toLocaleString()
-    
+
     const newNotif = {
       id: Date.now(),
-      title: notifForm.title,
-      message: notifForm.message,
+      title: notifForm.title.trim(),
+      message: notifForm.message.trim(),
       status: notifForm.schedule ? 'scheduled' : deliveryStatus,
       scheduledFor: scheduledDateTime,
-      sentAt: !notifForm.schedule ? new Date().toLocaleString() : null
+      sentAt: !notifForm.schedule ? new Date().toLocaleString() : null,
     }
-    
-    setNotifications([newNotif, ...notifications])
+
+    setNotifications(prev => [newNotif, ...prev])
     setNotifForm({ title: '', message: '', schedule: '' })
-    
-    if (notifForm.schedule) {
-      showToast('Notification scheduled successfully!', 'success')
-    } else {
-      showToast(`Notification ${deliveryStatus === 'delivered' ? 'sent successfully!' : 'failed to send. Please try again.'}`, 
-        deliveryStatus === 'delivered' ? 'success' : 'error')
-    }
+    showToast(
+      notifForm.schedule
+        ? 'Notification scheduled successfully.'
+        : `Notification ${deliveryStatus === 'delivered' ? 'sent successfully.' : 'failed to send. Please try again.'}`,
+      deliveryStatus === 'delivered' || notifForm.schedule ? 'success' : 'error'
+    )
   }
-  
+
   const handleEditNotif = (notif) => {
-    // Failed notifications can now be edited
     setEditingNotif(notif)
-    setNotifForm({
-      title: notif.title,
-      message: notif.message,
-      schedule: ''
-    })
+    setNotifForm({ title: notif.title, message: notif.message, schedule: '' })
   }
-  
+
   const handleUpdateNotif = () => {
     if (!notifForm.title.trim() || !notifForm.message.trim()) {
-      showToast('Please fill in title and message', 'error')
+      showToast('Please fill in title and message.', 'error')
       return
     }
-    
-    setNotifications(notifications.map(item =>
+
+    setNotifications(prev => prev.map(item =>
       item.id === editingNotif.id
-        ? {
-            ...item,
-            title: notifForm.title,
-            message: notifForm.message
-          }
+        ? { ...item, title: notifForm.title.trim(), message: notifForm.message.trim() }
         : item
     ))
-    
-    setEditingNotif(null)
-    setNotifForm({ title: '', message: '', schedule: '' })
-    showToast('Notification updated successfully!', 'success')
+
+    handleDiscard()
+    showToast('Notification updated successfully.')
   }
-  
+
   const handleDeleteNotif = (id, status) => {
-    if (status === 'failed') {
-      if (window.confirm('This notification failed. Do you still want to delete it?')) {
-        setNotifications(notifications.filter(item => item.id !== id))
-        showToast('Failed notification deleted', 'success')
-      }
-    } else if (window.confirm('Are you sure you want to delete this notification?')) {
-      setNotifications(notifications.filter(item => item.id !== id))
-      showToast('Notification deleted successfully', 'success')
+    const message = status === 'failed'
+      ? 'This notification failed. Do you still want to delete it?'
+      : 'Are you sure you want to delete this notification?'
+
+    if (window.confirm(message)) {
+      setNotifications(prev => prev.filter(item => item.id !== id))
+      showToast(status === 'failed' ? 'Failed notification deleted.' : 'Notification deleted successfully.')
     }
   }
-  
-  const handleDiscard = () => {
-    if (editingNews || editingNotif) {
-      setEditingNews(null)
-      setEditingNotif(null)
-    }
-    setNewsForm({ title: '', description: '', expiryDate: '' })
-    setNotifForm({ title: '', message: '', schedule: '' })
-    setActive(true)
-  }
-  
+
   return (
-    <div className="space-y-4">
-      {/* Toast Notification */}
+    <div className="space-y-5">
       {toast && (
-        <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg animate-in slide-in-from-top-2 ${
-          toast.type === 'error' ? 'bg-red-500 text-white' : 'bg-green-500 text-white'
-        }`}>
+        <div className={`fixed top-4 right-4 z-50 rounded-lg px-4 py-3 text-sm font-semibold text-white shadow-lg ${
+          toast.type === 'error' ? 'bg-red-600' : ''
+        }`} style={toast.type === 'error' ? undefined : themedPrimary}>
           {toast.message}
         </div>
       )}
-    
-      <div>
-        <h2 className="text-xl font-bold text-slate-900 dark:text-white">News/Notification Management</h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Manage news and notifications for suppliers</p>
-      </div>
 
-      <div className="flex gap-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-1 w-fit">
-        {['news', 'notifications'].map(t => (
-          <button key={t} onClick={() => {
-            setTab(t)
-            handleDiscard()
-          }}
-            className={`px-4 py-1.5 rounded-md text-sm font-semibold capitalize transition-colors
-              ${tab === t ? 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400'}`}>
-            {t}
-          </button>
-        ))}
-      </div>
+      <PageHeader
+        title="Communication Center"
+        description="Manage supplier news updates and direct notifications."
+        badge="Supplier communication"
+        icon={Megaphone}
+      />
 
-      {tab === 'news' && (
-        <div className="space-y-3">
-          <div className="flex gap-2">
-            {['all', 'active', 'draft', 'expired'].map(f => (
-              <button
-                key={f}
-                onClick={() => setNewsFilter(f)}
-                className={`px-3 py-1.5 rounded-full text-xs font-semibold capitalize border transition-colors
-                  ${
-                    newsFilter === f
-                      ? f === 'all'
-                        ? 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600'
-                        : f === 'active'
-                        ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-300 dark:border-green-800'
-                        : f === 'draft'
-                        ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 border-yellow-300 dark:border-yellow-800'
-                        : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 border-red-300 dark:border-red-800'
-                      : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
-                  }`}
-              >
-                {f}
-              </button>
+      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
+        <div className="flex flex-col gap-4 border-b border-slate-200 p-4 dark:border-slate-700 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex w-fit gap-1 rounded-lg bg-slate-100 p-1 dark:bg-slate-900">
+            {tabs.map(item => {
+              const Icon = item.icon
+              const isActive = tab === item.id
+
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => handleTabChange(item.id)}
+                  className="flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold transition-colors"
+                  style={isActive ? themedPrimary : { color: 'var(--theme-textSecondary)' }}
+                >
+                  <Icon size={15} />
+                  {item.label}
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 sm:flex">
+            {(tab === 'news' ? newsFilters : notificationFilters).map(filter => (
+              <FilterButton
+                key={filter}
+                filter={filter}
+                activeFilter={tab === 'news' ? newsFilter : notifFilter}
+                count={countStatus(tab === 'news' ? newsItems : notifications, filter)}
+                onClick={() => tab === 'news' ? setNewsFilter(filter) : setNotifFilter(filter)}
+              />
             ))}
           </div>
-          <div className="flex gap-4 items-start">
-            <div className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
+        </div>
+
+        <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px]">
+          <div className="min-w-0 border-b border-slate-200 dark:border-slate-700 xl:border-b-0 xl:border-r">
+            <div className="flex items-center justify-between gap-4 bg-slate-50 px-4 py-3 dark:bg-slate-900/50">
+              <div className="flex items-center gap-2">
+                <ActiveTabIcon size={17} className="text-slate-500" />
+                <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                  {tab === 'news' ? 'News Board' : 'Notification Queue'}
+                </h3>
+              </div>
+              <span className="text-xs font-semibold text-slate-400">
+                {(tab === 'news' ? filteredNews : filteredNotifications).length} records
+              </span>
+            </div>
+
+            {tab === 'news' ? (
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-200 dark:border-slate-700">
-                      {['Title', 'Message', 'Created Date', 'Expired Date', 'Status', 'Action'].map(h => (
-                        <th key={h} className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wide py-3 px-4">{h}</th>
-                      ))}
+                <table className="w-full min-w-[820px] text-sm">
+                  <thead className="border-y border-slate-200 bg-white text-xs uppercase text-slate-400 dark:border-slate-700 dark:bg-slate-800">
+                    <tr>
+                      <th className="px-4 py-3 text-left font-semibold">Title</th>
+                      <th className="px-4 py-3 text-left font-semibold">Message</th>
+                      <th className="px-4 py-3 text-left font-semibold">Created</th>
+                      <th className="px-4 py-3 text-left font-semibold">Expiry</th>
+                      <th className="px-4 py-3 text-left font-semibold">Status</th>
+                      <th className="px-4 py-3 text-right font-semibold">Action</th>
                     </tr>
                   </thead>
-                  <tbody>
-                    {filtered.map(n => (
-                      <tr key={n.id} className="border-b border-slate-50 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30">
-                        <td className="py-3 px-4 font-semibold text-slate-700 dark:text-slate-300 max-w-[140px] truncate">{n.title}</td>
-                        <td className="py-3 px-4 text-slate-400 text-xs max-w-40 truncate">{n.description}</td>
-                        <td className="py-3 px-4 text-slate-400 text-xs">{n.created}</td>
-                        <td className="py-3 px-4 text-slate-400 text-xs">{n.expiry}</td>
-                        <td className="py-3 px-4"><StatusBadge status={n.status} /></td>
-                        <td className="py-3 px-4">
-                          <div className="flex gap-1">
-                            <button 
-                              onClick={() => handleEditNews(n)}
-                              disabled={n.status === 'expired'}
-                              className={`p-1.5 rounded-lg border transition-colors ${
-                                n.status === 'expired'
-                                  ? 'border-slate-200 dark:border-slate-600 text-slate-500 dark:text-slate-600 cursor-not-allowed opacity-50'
-                                  : 'border-slate-200 dark:border-slate-600 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-700'
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                    {filteredNews.map(item => (
+                      <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                        <td className="px-4 py-3 font-semibold text-slate-800 dark:text-slate-200">{item.title}</td>
+                        <td className="max-w-72 px-4 py-3 text-xs text-slate-500 dark:text-slate-400">
+                          <span className="line-clamp-2">{item.description}</span>
+                        </td>
+                        <td className="px-4 py-3 text-xs text-slate-400">{item.created}</td>
+                        <td className="px-4 py-3 text-xs text-slate-400">{item.expiry}</td>
+                        <td className="px-4 py-3"><StatusBadge status={item.status} /></td>
+                        <td className="px-4 py-3">
+                          <div className="flex justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleEditNews(item)}
+                              disabled={item.status === 'expired'}
+                              className={`rounded-lg border p-1.5 transition-colors ${
+                                item.status === 'expired'
+                                  ? 'cursor-not-allowed border-slate-200 text-slate-300 dark:border-slate-700 dark:text-slate-600'
+                                  : 'border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700'
                               }`}
-                              title={n.status === 'expired' ? 'Cannot edit expired news' : 'Edit news'}>
-                              <Pencil size={12} />
+                            >
+                              <Pencil size={13} />
                             </button>
-                            <button 
-                              onClick={() => handleDeleteNews(n.id, n.status)}
-                              className="p-1.5 rounded-lg border border-red-200 dark:border-red-900/40 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
-                              <Trash2 size={12} />
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteNews(item.id, item.status)}
+                              className="rounded-lg border border-red-200 p-1.5 text-red-500 transition-colors hover:bg-red-50 dark:border-red-900/40 dark:hover:bg-red-900/20"
+                            >
+                              <Trash2 size={13} />
                             </button>
                           </div>
                         </td>
                       </tr>
                     ))}
-                    {filtered.length === 0 && (
+                    {filteredNews.length === 0 && (
                       <tr>
-                        <td colSpan="6" className="text-center py-8 text-slate-400">
-                          No news found
+                        <td colSpan="6">
+                          <EmptyState icon={Newspaper} title="No news found" description="Try another status filter or create a new news item." />
                         </td>
                       </tr>
                     )}
                   </tbody>
                 </table>
               </div>
-            </div>
-            <div className="w-72 flex-shrink-0 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4 space-y-3">
-              <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                {editingNews ? 'Edit News' : 'Create News'}
-              </p>
-              <div>
-                <label className="text-xs font-semibold text-slate-500 uppercase block mb-1.5">News Title *</label>
-                <input 
-                  type="text" 
-                  value={newsForm.title}
-                  onChange={e => setNewsForm({...newsForm, title: e.target.value})}
-                  placeholder="Enter title…" 
-                  className="w-full bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-700 dark:text-slate-300 outline-none focus:border-green-400" 
-                />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-500 uppercase block mb-1.5">Message Content *</label>
-                <textarea 
-                  rows={3} 
-                  value={newsForm.description}
-                  onChange={e => setNewsForm({...newsForm, description: e.target.value})}
-                  placeholder="Enter message…" 
-                  className="w-full bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-700 dark:text-slate-300 outline-none focus:border-green-400 resize-none" 
-                />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-500 uppercase block mb-1.5">Expiry Date</label>
-                <input 
-                  type="date" 
-                  value={newsForm.expiryDate}
-                  onChange={e => setNewsForm({...newsForm, expiryDate: e.target.value})}
-                  min={getTodayDate()}
-                  className="w-full bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-700 dark:text-slate-300 outline-none focus:border-green-400" 
-                />
-                <p className="text-xs text-slate-400 mt-1">Cannot select past dates</p>
-              </div>
-              <Toggle checked={active} onChange={e => setActive(e.target.checked)} label="Active News" />
-              <div className="flex gap-2 pt-1">
-                <button 
-                  onClick={handleDiscard}
-                  className="flex-1 py-2 text-sm font-semibold rounded-lg border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
-                  {editingNews ? 'Cancel' : 'Discard'}
-                </button>
-                <button 
-                  onClick={editingNews ? handleUpdateNews : handleCreateNews}
-                  className="flex-1 py-2 text-sm font-semibold rounded-lg bg-green-500 text-white hover:bg-green-600 transition-colors">
-                  {editingNews ? 'Update News' : 'Send News'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {tab === 'notifications' && (
-        <div className="space-y-3">
-          {/* Notification Filter Section */}
-          <div className="flex gap-2">
-            {['all', 'scheduled', 'delivered', 'failed'].map(f => (
-              <button
-                key={f}
-                onClick={() => setNotifFilter(f)}
-                className={`px-3 py-1.5 rounded-full text-xs font-semibold capitalize border transition-colors
-                  ${
-                    notifFilter === f
-                      ? f === 'all'
-                        ? 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600'
-                        : f === 'scheduled'
-                        ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border-blue-300 dark:border-blue-800'
-                        : f === 'delivered'
-                        ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-300 dark:border-green-800'
-                        : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 border-red-300 dark:border-red-800'
-                      : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
-                  }`}
-              >
-                {f}
-              </button>
-            ))}
-          </div>
-          
-          <div className="flex gap-4 items-start">
-            <div className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
+            ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-200 dark:border-slate-700">
-                      {['Title', 'Message', 'Status', 'Scheduled Date', 'Action'].map(h => (
-                        <th key={h} className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wide py-3 px-4">{h}</th>
-                      ))}
+                <table className="w-full min-w-[760px] text-sm">
+                  <thead className="border-y border-slate-200 bg-white text-xs uppercase text-slate-400 dark:border-slate-700 dark:bg-slate-800">
+                    <tr>
+                      <th className="px-4 py-3 text-left font-semibold">Title</th>
+                      <th className="px-4 py-3 text-left font-semibold">Message</th>
+                      <th className="px-4 py-3 text-left font-semibold">Status</th>
+                      <th className="px-4 py-3 text-left font-semibold">Scheduled</th>
+                      <th className="px-4 py-3 text-right font-semibold">Action</th>
                     </tr>
                   </thead>
-                  <tbody>
-                    {filteredNotifications.map(n => (
-                      <tr key={n.id} className="border-b border-slate-50 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30">
-                        <td className="py-3 px-4 font-semibold text-slate-700 dark:text-slate-300">{n.title}</td>
-                        <td className="py-3 px-4 text-slate-400 text-xs max-w-[200px] truncate">{n.message}</td>
-                        <td className="py-3 px-4">
-                          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${
-                            n.status === 'delivered' 
-                              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                              : n.status === 'scheduled'
-                              ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-                              : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                          }`}>
-                            {n.status}
-                          </span>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                    {filteredNotifications.map(item => (
+                      <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                        <td className="px-4 py-3 font-semibold text-slate-800 dark:text-slate-200">{item.title}</td>
+                        <td className="max-w-80 px-4 py-3 text-xs text-slate-500 dark:text-slate-400">
+                          <span className="line-clamp-2">{item.message}</span>
                         </td>
-                        <td className="py-3 px-4 text-slate-400 text-xs">{n.scheduledFor}</td>
-                        <td className="py-3 px-4">
-                          <div className="flex gap-1">
-                            <button 
-                              onClick={() => handleEditNotif(n)}
-                              className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-600 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-                              title="Edit notification">
-                              <Pencil size={12} />
+                        <td className="px-4 py-3"><NotificationStatus status={item.status} /></td>
+                        <td className="px-4 py-3 text-xs text-slate-400">{item.scheduledFor || item.sentAt || 'Immediate'}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleEditNotif(item)}
+                              className="rounded-lg border border-slate-200 p-1.5 text-slate-500 transition-colors hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+                            >
+                              <Pencil size={13} />
                             </button>
-                            <button 
-                              onClick={() => handleDeleteNotif(n.id, n.status)}
-                              className="p-1.5 rounded-lg border border-red-200 dark:border-red-900/40 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
-                              <Trash2 size={12} />
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteNotif(item.id, item.status)}
+                              className="rounded-lg border border-red-200 p-1.5 text-red-500 transition-colors hover:bg-red-50 dark:border-red-900/40 dark:hover:bg-red-900/20"
+                            >
+                              <Trash2 size={13} />
                             </button>
                           </div>
                         </td>
@@ -484,67 +475,173 @@ export default function Communication() {
                     ))}
                     {filteredNotifications.length === 0 && (
                       <tr>
-                        <td colSpan="5" className="text-center py-8 text-slate-400">
-                          No notifications found
+                        <td colSpan="5">
+                          <EmptyState icon={Bell} title="No notifications found" description="Try another status filter or send a new notification." />
                         </td>
                       </tr>
                     )}
                   </tbody>
                 </table>
               </div>
-            </div>
-            <div className="w-72 flex-shrink-0 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4 space-y-3">
-              <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                {editingNotif ? 'Edit Notification' : 'Send Notification'}
-              </p>
-              <div>
-                <label className="text-xs font-semibold text-slate-400 uppercase block mb-1.5">Title *</label>
-                <input 
-                  type="text" 
-                  value={notifForm.title}
-                  onChange={e => setNotifForm({...notifForm, title: e.target.value})}
-                  placeholder="Enter title…" 
-                  className="w-full bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-700 dark:text-slate-300 outline-none focus:border-green-400" 
-                />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-400 uppercase block mb-1.5">Message *</label>
-                <textarea 
-                  rows={3} 
-                  value={notifForm.message}
-                  onChange={e => setNotifForm({...notifForm, message: e.target.value})}
-                  placeholder="Enter message…" 
-                  className="w-full bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-700 dark:text-slate-300 outline-none focus:border-green-400 resize-none" 
-                />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-400 uppercase block mb-1.5">Schedule (Optional)</label>
-                <input 
-                  type="datetime-local" 
-                  value={notifForm.schedule}
-                  onChange={e => setNotifForm({...notifForm, schedule: e.target.value})}
-                  min={getCurrentDateTime()}
-                  className="w-full bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-700 dark:text-slate-300 outline-none focus:border-green-400" 
-                />
-                <p className="text-xs text-slate-400 mt-1">Cannot schedule in the past</p>
-              </div>
-              <div className="flex gap-2 pt-1">
-                <button 
-                  onClick={handleDiscard}
-                  className="flex-1 py-2 text-sm font-semibold rounded-lg border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
-                  {editingNotif ? 'Cancel' : 'Discard'}
-                </button>
-                <button 
-                  onClick={editingNotif ? handleUpdateNotif : handleSendNotification}
-                  className="flex-1 py-2 text-sm font-semibold rounded-lg bg-green-500 text-white hover:bg-green-600 transition-colors flex items-center justify-center gap-1">
-                  <Send size={14} />
-                  {editingNotif ? 'Update' : 'Send'}
-                </button>
-              </div>
-            </div>
+            )}
           </div>
+
+          <aside className="bg-slate-50/70 p-4 dark:bg-slate-900/30">
+            {tab === 'news' ? (
+              <div className="rounded-xl border bg-white p-4 shadow-sm dark:bg-slate-800" style={themedPrimaryBorder}>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{editingNews ? 'Edit News' : 'Create News'}</p>
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Publish supplier notice board updates.</p>
+                  </div>
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg" style={themedPrimarySoft}>
+                    {editingNews ? <Edit3 size={16} /> : <Newspaper size={16} />}
+                  </div>
+                </div>
+
+                <div className="mt-4 space-y-4">
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold uppercase text-slate-500">News Title</label>
+                    <input
+                      type="text"
+                      value={newsForm.title}
+                      onChange={event => setNewsForm({ ...newsForm, title: event.target.value })}
+                      placeholder="Enter title..."
+                      className="w-full rounded-lg border bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition-colors focus:ring-2 dark:bg-slate-900 dark:text-slate-300"
+                      style={themedInput}
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold uppercase text-slate-500">Message Content</label>
+                    <textarea
+                      rows={4}
+                      value={newsForm.description}
+                      onChange={event => setNewsForm({ ...newsForm, description: event.target.value })}
+                      placeholder="Enter message..."
+                      className="w-full resize-none rounded-lg border bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition-colors focus:ring-2 dark:bg-slate-900 dark:text-slate-300"
+                      style={themedInput}
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold uppercase text-slate-500">Expiry Date</label>
+                    <div className="relative">
+                      <CalendarDays size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="date"
+                        value={newsForm.expiryDate}
+                        onChange={event => setNewsForm({ ...newsForm, expiryDate: event.target.value })}
+                        min={getTodayDate()}
+                        className="w-full rounded-lg border bg-white py-2.5 pl-9 pr-3 text-sm text-slate-700 outline-none transition-colors focus:ring-2 dark:bg-slate-900 dark:text-slate-300"
+                        style={themedInput}
+                      />
+                    </div>
+                  </div>
+                  <Toggle checked={active} onChange={event => setActive(event.target.checked)} label="Active News" />
+
+                  <div className="flex gap-3 pt-1">
+                    <button
+                      type="button"
+                      onClick={handleDiscard}
+                      className="flex-1 rounded-lg border border-slate-200 py-2.5 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+                    >
+                      <span className="inline-flex items-center gap-2">
+                        <X size={14} />
+                        {editingNews ? 'Cancel' : 'Discard'}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={editingNews ? handleUpdateNews : handleCreateNews}
+                      className="flex-1 rounded-lg py-2.5 text-sm font-semibold transition-colors"
+                      style={themedPrimary}
+                    >
+                      <span className="inline-flex items-center gap-2">
+                        <Check size={14} />
+                        {editingNews ? 'Update' : 'Publish'}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-xl border bg-white p-4 shadow-sm dark:bg-slate-800" style={themedPrimaryBorder}>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{editingNotif ? 'Edit Notification' : 'Send Notification'}</p>
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Send or schedule supplier messages.</p>
+                  </div>
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg" style={themedPrimarySoft}>
+                    {editingNotif ? <Edit3 size={16} /> : <MessageSquare size={16} />}
+                  </div>
+                </div>
+
+                <div className="mt-4 space-y-4">
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold uppercase text-slate-500">Title</label>
+                    <input
+                      type="text"
+                      value={notifForm.title}
+                      onChange={event => setNotifForm({ ...notifForm, title: event.target.value })}
+                      placeholder="Enter title..."
+                      className="w-full rounded-lg border bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition-colors focus:ring-2 dark:bg-slate-900 dark:text-slate-300"
+                      style={themedInput}
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold uppercase text-slate-500">Message</label>
+                    <textarea
+                      rows={4}
+                      value={notifForm.message}
+                      onChange={event => setNotifForm({ ...notifForm, message: event.target.value })}
+                      placeholder="Enter message..."
+                      className="w-full resize-none rounded-lg border bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition-colors focus:ring-2 dark:bg-slate-900 dark:text-slate-300"
+                      style={themedInput}
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold uppercase text-slate-500">Schedule</label>
+                    <div className="relative">
+                      <Clock size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="datetime-local"
+                        value={notifForm.schedule}
+                        onChange={event => setNotifForm({ ...notifForm, schedule: event.target.value })}
+                        min={getCurrentDateTime()}
+                        className="w-full rounded-lg border bg-white py-2.5 pl-9 pr-3 text-sm text-slate-700 outline-none transition-colors focus:ring-2 dark:bg-slate-900 dark:text-slate-300"
+                        style={themedInput}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3 pt-1">
+                    <button
+                      type="button"
+                      onClick={handleDiscard}
+                      className="flex-1 rounded-lg border border-slate-200 py-2.5 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+                    >
+                      <span className="inline-flex items-center gap-2">
+                        <X size={14} />
+                        {editingNotif ? 'Cancel' : 'Discard'}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={editingNotif ? handleUpdateNotif : handleSendNotification}
+                      className="flex-1 rounded-lg py-2.5 text-sm font-semibold transition-colors"
+                      style={themedPrimary}
+                    >
+                      <span className="inline-flex items-center gap-2">
+                        <Send size={14} />
+                        {editingNotif ? 'Update' : 'Send'}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </aside>
         </div>
-      )}
+      </section>
     </div>
   )
 }
