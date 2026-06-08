@@ -5,137 +5,14 @@ import {
   UserCog, Sliders, Check, ChevronRight, ChevronDown,
   CheckSquare, Square
 } from 'lucide-react';
-
-// Mock Data for Users
-const USERS = [
-  { id: 1, name: 'Dr. Chamara Silva', email: 'chamara@agri.lk', role: 'Super Admin', avatar: null, status: 'active' },
-  { id: 2, name: 'Kumari Wickramasinghe', email: 'kumari@agri.lk', role: 'Admin', avatar: null, status: 'active' },
-  { id: 3, name: 'Nuwan Perera', email: 'nuwan@agri.lk', role: 'Support', avatar: null, status: 'inactive' },
-  { id: 4, name: 'Amal Rathnayake', email: 'amal@agri.lk', role: 'Viewer', avatar: null, status: 'active' },
-];
-
-// Detailed Sub-Permissions for each module based on requirements
-const SUB_PERMISSIONS = {
-  dashboard: [
-    { id: 'view_stats', label: 'View Statistics & Cards', description: 'View total suppliers and request counts' },
-    { id: 'view_graphs', label: 'View Graphs', description: 'Access request status overview graphs' },
-    { id: 'quick_actions', label: 'Quick Actions', description: 'Use quick approve buttons for requests' },
-    { id: 'view_activity', label: 'View Activity Feed', description: 'See recent activity table' },
-  ],
-  suppliers: [
-    { id: 'search', label: 'Search Suppliers', description: 'Search by RegNo/Name/Route' },
-    { id: 'view_table', label: 'View Supplier Table', description: 'See all supplier details in table' },
-    { id: 'view_history', label: 'View Request History', description: 'Access advance, fertilizer, item request history' },
-    { id: 'export', label: 'Export Data', description: 'Export supplier list' },
-  ],
-  requests: [
-    { id: 'view_advance', label: 'View Advance Requests', description: 'Access advance request management' },
-    { id: 'view_fertilizer', label: 'View Fertilizer Requests', description: 'Access fertilizer request management' },
-    { id: 'view_items', label: 'View Item Requests', description: 'Access item request management' },
-    { id: 'approve_reject', label: 'Approve/Reject Requests', description: 'Ability to approve or reject requests' },
-    { id: 'view_supply_profile', label: 'View Supply Profile', description: 'See supplier personal/bank/land info' },
-    { id: 'view_supply_history', label: 'View Supply History', description: 'See leaf weight delivery logs' },
-    { id: 'add_remarks', label: 'Add Remarks/Notes', description: 'Add notes to requests' },
-    { id: 'filter_requests', label: 'Filter Requests', description: 'Filter by status, search, route' },
-  ],
-  configurations: [
-    { id: 'view_fertilizer', label: 'View Fertilizer Types', description: 'See fertilizer management table' },
-    { id: 'view_items', label: 'View Item Types', description: 'See item management table' },
-    { id: 'add_fertilizer', label: 'Add Fertilizer Type', description: 'Create new fertilizer types' },
-    { id: 'add_items', label: 'Add Item Type', description: 'Create new item types' },
-    { id: 'edit_types', label: 'Edit Types', description: 'Edit fertilizer/item types' },
-    { id: 'toggle_status', label: 'Toggle Active/Inactive', description: 'Change status of types' },
-  ],
-  communication: [
-    { id: 'view_news', label: 'View News', description: 'See news management table' },
-    { id: 'view_notifications', label: 'View Notifications', description: 'See notification management table' },
-    { id: 'create_news', label: 'Create News', description: 'Add new news articles' },
-    { id: 'create_notifications', label: 'Create Notifications', description: 'Add new notifications' },
-    { id: 'edit_news', label: 'Edit News', description: 'Edit existing news' },
-    { id: 'edit_notifications', label: 'Edit Notifications', description: 'Edit existing notifications' },
-    { id: 'delete_news', label: 'Delete News', description: 'Remove news articles' },
-    { id: 'delete_notifications', label: 'Delete Notifications', description: 'Remove notifications' },
-    { id: 'schedule', label: 'Schedule Notifications', description: 'Set schedule for notifications' },
-  ],
-  userManagement: [
-    { id: 'view_users', label: 'View Users', description: 'See all system users' },
-    { id: 'add_users', label: 'Add Users', description: 'Create new users' },
-    { id: 'edit_users', label: 'Edit Users', description: 'Modify user details' },
-    { id: 'delete_users', label: 'Delete Users', description: 'Remove users from system' },
-    { id: 'assign_roles', label: 'Assign Roles', description: 'Change user roles' },
-    { id: 'reset_passwords', label: 'Reset Passwords', description: 'Force password reset' },
-  ],
-  settings: [
-    { id: 'view_settings', label: 'View Settings', description: 'See system configuration' },
-    { id: 'edit_settings', label: 'Edit Settings', description: 'Modify system settings' },
-    { id: 'view_audit', label: 'View Audit Trail', description: 'Access audit logs' },
-    { id: 'backup_restore', label: 'Backup/Restore', description: 'System backup operations' },
-  ],
-};
-
-// Initial permissions for each role (module level + sub-permissions)
-const INITIAL_MODULE_PERMISSIONS = {
-  'Super Admin': { dashboard: true, suppliers: true, requests: true, configurations: true, communication: true, userManagement: true, settings: true },
-  'Admin': { dashboard: true, suppliers: true, requests: true, configurations: true, communication: true, userManagement: true, settings: false },
-  'Support': { dashboard: true, suppliers: false, requests: true, configurations: false, communication: true, userManagement: false, settings: false },
-  'Viewer': { dashboard: true, suppliers: true, requests: true, configurations: false, communication: false, userManagement: false, settings: false },
-};
-
-// Initial sub-permissions for each role
-const INITIAL_SUB_PERMISSIONS = {
-  'Super Admin': {
-    dashboard: ['view_stats', 'view_graphs', 'quick_actions', 'view_activity'],
-    suppliers: ['search', 'view_table', 'view_history', 'export'],
-    requests: ['view_advance', 'view_fertilizer', 'view_items', 'approve_reject', 'view_supply_profile', 'view_supply_history', 'add_remarks', 'filter_requests'],
-    configurations: ['view_fertilizer', 'view_items', 'add_fertilizer', 'add_items', 'edit_types', 'toggle_status'],
-    communication: ['view_news', 'view_notifications', 'create_news', 'create_notifications', 'edit_news', 'edit_notifications', 'delete_news', 'delete_notifications', 'schedule'],
-    userManagement: ['view_users', 'add_users', 'edit_users', 'delete_users', 'assign_roles', 'reset_passwords'],
-    settings: ['view_settings', 'edit_settings', 'view_audit', 'backup_restore'],
-  },
-  'Admin': {
-    dashboard: ['view_stats', 'view_graphs', 'quick_actions', 'view_activity'],
-    suppliers: ['search', 'view_table', 'view_history', 'export'],
-    requests: ['view_advance', 'view_fertilizer', 'view_items', 'approve_reject', 'view_supply_profile', 'view_supply_history', 'add_remarks', 'filter_requests'],
-    configurations: ['view_fertilizer', 'view_items', 'add_fertilizer', 'add_items', 'edit_types', 'toggle_status'],
-    communication: ['view_news', 'view_notifications', 'create_news', 'create_notifications', 'edit_news', 'edit_notifications', 'delete_news', 'delete_notifications', 'schedule'],
-    userManagement: ['view_users', 'add_users', 'edit_users', 'delete_users', 'assign_roles', 'reset_passwords'],
-    settings: [],
-  },
-  'Support': {
-    dashboard: ['view_stats', 'view_graphs', 'view_activity'],
-    suppliers: [],
-    requests: ['view_advance', 'view_fertilizer', 'view_items', 'approve_reject', 'view_supply_profile', 'view_supply_history', 'add_remarks', 'filter_requests'],
-    configurations: [],
-    communication: ['view_news', 'view_notifications', 'create_news', 'create_notifications', 'edit_news', 'edit_notifications'],
-    userManagement: [],
-    settings: [],
-  },
-  'Viewer': {
-    dashboard: ['view_stats', 'view_graphs', 'view_activity'],
-    suppliers: ['search', 'view_table', 'view_history'],
-    requests: ['view_advance', 'view_fertilizer', 'view_items', 'view_supply_profile', 'view_supply_history', 'filter_requests'],
-    configurations: [],
-    communication: [],
-    userManagement: [],
-    settings: [],
-  },
-};
-
-// Helper Components
-const StatusBadge = ({ status }) => (
-  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${status === 'active' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400'}`}>
-    {status}
-  </span>
-);
-
-const Avatar = ({ name }) => {
-  const initials = name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-  return (
-    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white text-xs font-semibold shadow-sm">
-      {initials}
-    </div>
-  );
-};
+import Avatar from '../components/ui/Avatar';
+import StatusBadge from '../components/ui/StatusBadge';
+import {
+  permissionCatalog as SUB_PERMISSIONS,
+  roleModulePermissionDefaults as INITIAL_MODULE_PERMISSIONS,
+  roleSubPermissionDefaults as INITIAL_SUB_PERMISSIONS,
+  systemUsers as USERS,
+} from '../data/mockData';
 
 // Module definitions with icons and labels
 const MODULES = [

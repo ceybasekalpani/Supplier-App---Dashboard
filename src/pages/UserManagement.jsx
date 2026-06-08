@@ -1,46 +1,14 @@
 // UserManagement.jsx
-import React, { useState, useRef } from 'react';
-import { Pencil, Trash2, Camera, X, Search, ChevronDown } from 'lucide-react';
-
-// Mock Data
-const ROLES = [
-  { id: 1, name: 'Super Admin' },
-  { id: 2, name: 'Admin' },
-  { id: 3, name: 'Support' },
-  { id: 4, name: 'Viewer' },
-];
-
-const INITIAL_USERS = [
-  { id: 1, name: 'Dr. Chamara Silva', email: 'chamara@agri.lk', username: 'chamara.s', password: '123456', phoneNo: '+94 77 123 4567', role: 'Super Admin', status: 'active', avatar: null, createdAt: '2024-01-15' },
-  { id: 2, name: 'Kumari Wickramasinghe', email: 'kumari@agri.lk', username: 'kumari.w', password: '123456', phoneNo: '+94 71 234 5678', role: 'Admin', status: 'active', avatar: null, createdAt: '2024-02-10' },
-  { id: 3, name: 'Nuwan Perera', email: 'nuwan@agri.lk', username: 'nuwan.p', password: '123456', phoneNo: '+94 70 345 6789', role: 'Support', status: 'inactive', avatar: null, createdAt: '2024-02-20' },
-];
-
-const StatusBadge = ({ status }) => {
-  const styles = {
-    active: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800',
-    inactive: 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400 border-rose-200 dark:border-rose-800',
-  };
-  return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize border ${styles[status]}`}>
-      {status}
-    </span>
-  );
-};
-
-const Avatar = ({ name, size = 'md', src = null }) => {
-  const initials = name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-  const sizeClasses = { sm: 'w-8 h-8 text-xs', md: 'w-10 h-10 text-sm', lg: 'w-12 h-12 text-base' };
-  if (src) return <img src={src} alt={name} className={`${sizeClasses[size]} rounded-full object-cover border border-slate-200 dark:border-slate-700`} />;
-  return (
-    <div className={`${sizeClasses[size]} rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-semibold shadow-sm`}>
-      {initials}
-    </div>
-  );
-};
+import { useState, useRef } from 'react';
+import { Pencil, Trash2, Camera, X, Search } from 'lucide-react';
+import { systemUsers, userRoles } from '../data/mockData';
+import Avatar from '../components/ui/Avatar';
+import FormInput from '../components/ui/FormInput';
+import StatusBadge from '../components/ui/StatusBadge';
+import { sanitizeText, validateUserForm } from '../utils/validation';
 
 const UserManagement = () => {
-  const [users, setUsers] = useState(INITIAL_USERS);
+  const [users, setUsers] = useState(systemUsers);
   const [editingUser, setEditingUser] = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -48,7 +16,6 @@ const UserManagement = () => {
   const [formData, setFormData] = useState({
     fullName: '', email: '', username: '', password: '', phoneNo: '', role: 'Admin', status: 'active'
   });
-  const [profileImage, setProfileImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const [errors, setErrors] = useState({});
   const fileInputRef = useRef(null);
@@ -65,14 +32,7 @@ const UserManagement = () => {
   const inactiveCount = users.filter(u => u.status === 'inactive').length;
 
   const validateForm = () => {
-    const newErrors = {};
-    if (!formData.fullName.trim()) newErrors.fullName = 'Full name is required';
-    if (!formData.email.trim()) newErrors.email = 'Email is required';
-    else if (!/\S+@\S+\.\S+/.test(formData.email)) newErrors.email = 'Invalid email format';
-    if (!formData.username.trim()) newErrors.username = 'Username is required';
-    if (!editingUser && !formData.password.trim()) newErrors.password = 'Password is required';
-    else if (!editingUser && formData.password.length < 4) newErrors.password = 'Password must be at least 4 characters';
-    if (formData.phoneNo && !/^[\d\s+()-]{10,}$/.test(formData.phoneNo.replace(/\s/g, ''))) newErrors.phoneNo = 'Invalid phone number';
+    const newErrors = validateUserForm(formData, { editing: Boolean(editingUser) });
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -83,14 +43,14 @@ const UserManagement = () => {
       if (file.size > 2 * 1024 * 1024) return alert('Image size must be less than 2MB');
       if (!file.type.startsWith('image/')) return alert('Only image files are allowed');
       const reader = new FileReader();
-      reader.onloadend = () => { setImagePreview(reader.result); setProfileImage(file); };
+      reader.onloadend = () => { setImagePreview(reader.result); };
       reader.readAsDataURL(file);
     }
   };
 
   const resetForm = () => {
     setFormData({ fullName: '', email: '', username: '', password: '', phoneNo: '', role: 'Admin', status: 'active' });
-    setProfileImage(null); setImagePreview(null); setEditingUser(null); setErrors({});
+    setImagePreview(null); setEditingUser(null); setErrors({});
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -98,13 +58,13 @@ const UserManagement = () => {
     if (!validateForm()) return;
     if (editingUser) {
       setUsers(users.map(u => u.id === editingUser.id ? {
-        ...editingUser, name: formData.fullName, email: formData.email, username: formData.username,
-        phoneNo: formData.phoneNo, role: formData.role, status: formData.status,
+        ...editingUser, name: sanitizeText(formData.fullName), email: sanitizeText(formData.email), username: sanitizeText(formData.username),
+        phoneNo: sanitizeText(formData.phoneNo), role: formData.role, status: formData.status,
         avatar: imagePreview || editingUser.avatar
       } : u));
       alert('User updated successfully!');
     } else {
-      setUsers([...users, { id: Date.now(), name: formData.fullName, email: formData.email, username: formData.username, password: formData.password, phoneNo: formData.phoneNo, role: formData.role, status: formData.status, avatar: imagePreview || null, createdAt: new Date().toISOString() }]);
+      setUsers([...users, { id: Date.now(), name: sanitizeText(formData.fullName), email: sanitizeText(formData.email), username: sanitizeText(formData.username), password: formData.password, phoneNo: sanitizeText(formData.phoneNo), role: formData.role, status: formData.status, avatar: imagePreview || null, createdAt: new Date().toISOString() }]);
       alert('User created successfully!');
     }
     resetForm();
@@ -113,7 +73,7 @@ const UserManagement = () => {
   const handleEdit = (user) => {
     setEditingUser(user);
     setFormData({ fullName: user.name, email: user.email, username: user.username, password: '', phoneNo: user.phoneNo || '', role: user.role, status: user.status });
-    setImagePreview(user.avatar || null); setProfileImage(null); setErrors({});
+    setImagePreview(user.avatar || null); setErrors({});
   };
 
   const handleDelete = () => {
@@ -224,7 +184,7 @@ const UserManagement = () => {
                 <button onClick={() => fileInputRef.current?.click()} className="w-24 h-24 rounded-full border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center text-slate-400 hover:border-emerald-500 hover:text-emerald-500 transition-colors overflow-hidden bg-slate-50 dark:bg-slate-700/30">
                   {imagePreview ? <img src={imagePreview} alt="Profile" className="w-full h-full object-cover" /> : <Camera size={28} />}
                 </button>
-                {imagePreview && <button onClick={() => { setImagePreview(null); setProfileImage(null); if(fileInputRef.current) fileInputRef.current.value = ''; }} className="absolute -top-1 -right-1 bg-rose-500 text-white rounded-full p-0.5"><X size={12} /></button>}
+                {imagePreview && <button onClick={() => { setImagePreview(null); if(fileInputRef.current) fileInputRef.current.value = ''; }} className="absolute -top-1 -right-1 bg-rose-500 text-white rounded-full p-0.5"><X size={12} /></button>}
                 <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
               </div>
             </div>
@@ -238,18 +198,24 @@ const UserManagement = () => {
                 const showField = !(isPassword && editingUser);
                 if (!showField) return null;
                 return (
-                  <div key={field}>
-                    <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">{label} {required && <span className="text-rose-500">*</span>}</label>
-                    <input type={isPassword ? 'password' : 'text'} name={field} value={formData[field]} onChange={(e) => setFormData(prev => ({ ...prev, [field]: e.target.value }))} placeholder={`Enter ${label.toLowerCase()}`} className={`w-full px-3 py-2 border ${errors[field] ? 'border-rose-500' : 'border-slate-300 dark:border-slate-600'} rounded-lg text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500`} />
-                    {errors[field] && <p className="text-xs text-rose-500 mt-1">{errors[field]}</p>}
-                  </div>
+                  <FormInput
+                    key={field}
+                    label={label}
+                    name={field}
+                    type={isPassword ? 'password' : 'text'}
+                    value={formData[field]}
+                    required={required}
+                    error={errors[field]}
+                    placeholder={`Enter ${label.toLowerCase()}`}
+                    onChange={(e) => setFormData(prev => ({ ...prev, [field]: e.target.value }))}
+                  />
                 );
               })}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Role</label>
                   <select value={formData.role} onChange={(e) => setFormData(prev => ({ ...prev, role: e.target.value }))} className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500/20">
-                    {ROLES.map(role => <option key={role.id} value={role.name}>{role.name}</option>)}
+                    {userRoles.map(role => <option key={role.id} value={role.name}>{role.name}</option>)}
                   </select>
                 </div>
                 <div>

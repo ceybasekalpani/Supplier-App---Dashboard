@@ -61,6 +61,156 @@ export const itemTypes = [
   { id: 4, name: 'Rain Coat',      qty: 60,  status: 'active'   },
 ]
 
+export const approvedAdvances = [
+  { id: 1, regNo: 'REG001', supplierName: 'Kamal Perera', approvedAmount: 50000, approvedDate: '2026-06-01', status: 'pending_issue', route: 'route_a', issued: false },
+  { id: 2, regNo: 'REG002', supplierName: 'Sunil Silva', approvedAmount: 75000, approvedDate: '2026-06-03', status: 'pending_issue', route: 'route_b', issued: false },
+  { id: 3, regNo: 'REG003', supplierName: 'Nimal Jayawardena', approvedAmount: 30000, approvedDate: '2026-06-05', status: 'pending_issue', route: 'route_a', issued: false },
+]
+
+export const approvedFertilizers = [
+  { id: 1, regNo: 'REG001', supplierName: 'Kamal Perera', fertilizerType: 'Urea', approvedQty: 50, unit: 'kg', approvedDate: '2026-06-02', status: 'pending_issue', route: 'route_a', issued: false },
+  { id: 2, regNo: 'REG004', supplierName: 'Thusitha Bandara', fertilizerType: 'Potash', approvedQty: 30, unit: 'kg', approvedDate: '2026-06-04', status: 'pending_issue', route: 'route_c', issued: false },
+  { id: 3, regNo: 'REG005', supplierName: 'Ruwan Wickrama', fertilizerType: 'Super Phosphate', approvedQty: 40, unit: 'kg', approvedDate: '2026-06-06', status: 'pending_issue', route: 'route_b', issued: false },
+]
+
+export const approvedItems = [
+  { id: 1, regNo: 'REG002', supplierName: 'Sunil Silva', itemType: 'Harvesting Bag', approvedQty: 100, unit: 'pcs', approvedDate: '2026-06-02', status: 'pending_issue', route: 'route_b', issued: false },
+  { id: 2, regNo: 'REG003', supplierName: 'Nimal Jayawardena', itemType: 'Pruning Shears', approvedQty: 25, unit: 'pcs', approvedDate: '2026-06-04', status: 'pending_issue', route: 'route_a', issued: false },
+  { id: 3, regNo: 'REG006', supplierName: 'Chaminda Rajapaksa', itemType: 'Leaf Collection Basket', approvedQty: 15, unit: 'pcs', approvedDate: '2026-06-06', status: 'pending_issue', route: 'route_c', issued: false },
+]
+
+export const routeOptions = [
+  { id: 'all', name: 'All Routes' },
+  { id: 'route_a', name: 'Route A - Kandy' },
+  { id: 'route_b', name: 'Route B - Gampola' },
+  { id: 'route_c', name: 'Route C - Nawalapitiya' },
+]
+
+export const disbursementTrackingRows = [
+  { id: 1, regNo: 'REG001', supplierName: 'Kamal Perera', issuedType: 'advance', issuedDetails: 'Rs. 50,000', amount: 50000, requestDate: '2026-05-29', approvedDate: '2026-06-01', issueDate: '2026-06-01', currentStatus: 'awaiting', method: 'Bank Transfer', route: 'Route A' },
+  { id: 2, regNo: 'REG002', supplierName: 'Sunil Silva', issuedType: 'fertilizer', issuedDetails: 'Urea - 50 kg', itemName: 'Urea', qty: 50, unit: 'kg', requestDate: '2026-05-30', approvedDate: '2026-06-02', issueDate: '2026-06-02', currentStatus: 'awaiting', method: 'Physical Delivery', route: 'Route B' },
+  { id: 3, regNo: 'REG003', supplierName: 'Nimal Jayawardena', issuedType: 'items', issuedDetails: 'Harvesting Bag - 100 pcs', itemName: 'Harvesting Bag', qty: 100, unit: 'pcs', requestDate: '2026-05-31', approvedDate: '2026-06-03', issueDate: '2026-06-03', completedDate: '2026-06-03', completedBy: 'Admin', completedDevice: 'Factory Office Desktop', currentStatus: 'completed', method: 'Physical Delivery', route: 'Route A' },
+  { id: 4, regNo: 'REG004', supplierName: 'Thusitha Bandara', issuedType: 'fertilizer', issuedDetails: 'Potash - 30 kg', itemName: 'Potash', qty: 30, unit: 'kg', requestDate: '2026-06-01', approvedDate: '2026-06-04', issueDate: '2026-06-04', currentStatus: 'awaiting', method: 'Physical Delivery', route: 'Route C' },
+  { id: 5, regNo: 'REG005', supplierName: 'Ruwan Wickrama', issuedType: 'advance', issuedDetails: 'Rs. 75,000', amount: 75000, requestDate: '2026-06-02', approvedDate: '2026-06-05', issueDate: '2026-06-05', completedDate: '2026-06-05', completedBy: 'Admin', completedDevice: 'Factory Office Desktop', currentStatus: 'completed', method: 'Cheque', route: 'Route B' },
+]
+
+export const userRoles = [
+  { id: 1, name: 'Super Admin' },
+  { id: 2, name: 'Admin' },
+  { id: 3, name: 'Support' },
+  { id: 4, name: 'Viewer' },
+]
+
+export const systemUsers = [
+  { id: 1, name: 'Dr. Chamara Silva', email: 'chamara@agri.lk', username: 'chamara.s', password: '123456', phoneNo: '+94 77 123 4567', role: 'Super Admin', status: 'active', avatar: null, createdAt: '2024-01-15' },
+  { id: 2, name: 'Kumari Wickramasinghe', email: 'kumari@agri.lk', username: 'kumari.w', password: '123456', phoneNo: '+94 71 234 5678', role: 'Admin', status: 'active', avatar: null, createdAt: '2024-02-10' },
+  { id: 3, name: 'Nuwan Perera', email: 'nuwan@agri.lk', username: 'nuwan.p', password: '123456', phoneNo: '+94 70 345 6789', role: 'Support', status: 'inactive', avatar: null, createdAt: '2024-02-20' },
+  { id: 4, name: 'Amal Rathnayake', email: 'amal@agri.lk', username: 'amal.r', password: '123456', phoneNo: '+94 76 456 7890', role: 'Viewer', status: 'active', avatar: null, createdAt: '2024-03-05' },
+]
+
+export const permissionCatalog = {
+  dashboard: [
+    { id: 'view_stats', label: 'View Statistics & Cards', description: 'View total suppliers and request counts' },
+    { id: 'view_graphs', label: 'View Graphs', description: 'Access request status overview graphs' },
+    { id: 'quick_actions', label: 'Quick Actions', description: 'Use quick approve buttons for requests' },
+    { id: 'view_activity', label: 'View Activity Feed', description: 'See recent activity table' },
+  ],
+  suppliers: [
+    { id: 'search', label: 'Search Suppliers', description: 'Search by RegNo/Name/Route' },
+    { id: 'view_table', label: 'View Supplier Table', description: 'See all supplier details in table' },
+    { id: 'view_history', label: 'View Request History', description: 'Access advance, fertilizer, item request history' },
+    { id: 'export', label: 'Export Data', description: 'Export supplier list' },
+  ],
+  requests: [
+    { id: 'view_advance', label: 'View Advance Requests', description: 'Access advance request management' },
+    { id: 'view_fertilizer', label: 'View Fertilizer Requests', description: 'Access fertilizer request management' },
+    { id: 'view_items', label: 'View Item Requests', description: 'Access item request management' },
+    { id: 'approve_reject', label: 'Approve/Reject Requests', description: 'Ability to approve or reject requests' },
+    { id: 'view_supply_profile', label: 'View Supply Profile', description: 'See supplier personal/bank/land info' },
+    { id: 'view_supply_history', label: 'View Supply History', description: 'See leaf weight delivery logs' },
+    { id: 'add_remarks', label: 'Add Remarks/Notes', description: 'Add notes to requests' },
+    { id: 'filter_requests', label: 'Filter Requests', description: 'Filter by status, search, route' },
+  ],
+  configurations: [
+    { id: 'view_fertilizer', label: 'View Fertilizer Types', description: 'See fertilizer management table' },
+    { id: 'view_items', label: 'View Item Types', description: 'See item management table' },
+    { id: 'add_fertilizer', label: 'Add Fertilizer Type', description: 'Create new fertilizer types' },
+    { id: 'add_items', label: 'Add Item Type', description: 'Create new item types' },
+    { id: 'edit_types', label: 'Edit Types', description: 'Edit fertilizer/item types' },
+  ],
+  communication: [
+    { id: 'view_news', label: 'View News', description: 'See news management table' },
+    { id: 'view_notifications', label: 'View Notifications', description: 'See notification management table' },
+    { id: 'create_news', label: 'Create News', description: 'Add new news articles' },
+    { id: 'create_notifications', label: 'Create Notifications', description: 'Add new notifications' },
+    { id: 'edit_news', label: 'Edit News', description: 'Edit existing news' },
+    { id: 'edit_notifications', label: 'Edit Notifications', description: 'Edit existing notifications' },
+    { id: 'delete_news', label: 'Delete News', description: 'Remove news articles' },
+    { id: 'delete_notifications', label: 'Delete Notifications', description: 'Remove notifications' },
+    { id: 'schedule', label: 'Schedule Notifications', description: 'Set schedule for notifications' },
+  ],
+  userManagement: [
+    { id: 'view_users', label: 'View Users', description: 'See all system users' },
+    { id: 'add_users', label: 'Add Users', description: 'Create new users' },
+    { id: 'edit_users', label: 'Edit Users', description: 'Modify user details' },
+    { id: 'delete_users', label: 'Delete Users', description: 'Remove users from system' },
+    { id: 'assign_roles', label: 'Assign Roles', description: 'Change user roles' },
+    { id: 'reset_passwords', label: 'Reset Passwords', description: 'Force password reset' },
+  ],
+  settings: [
+    { id: 'view_settings', label: 'View Settings', description: 'See system configuration' },
+    { id: 'edit_settings', label: 'Edit Settings', description: 'Modify system settings' },
+    { id: 'view_audit', label: 'View Audit Trail', description: 'Access audit logs' },
+    { id: 'backup_restore', label: 'Backup/Restore', description: 'System backup operations' },
+  ],
+}
+
+export const roleModulePermissionDefaults = {
+  'Super Admin': { dashboard: true, suppliers: true, requests: true, configurations: true, communication: true, userManagement: true, settings: true },
+  Admin: { dashboard: true, suppliers: true, requests: true, configurations: true, communication: true, userManagement: true, settings: false },
+  Support: { dashboard: true, suppliers: false, requests: true, configurations: false, communication: true, userManagement: false, settings: false },
+  Viewer: { dashboard: true, suppliers: true, requests: true, configurations: false, communication: false, userManagement: false, settings: false },
+}
+
+export const roleSubPermissionDefaults = {
+  'Super Admin': {
+    dashboard: ['view_stats', 'view_graphs', 'quick_actions', 'view_activity'],
+    suppliers: ['search', 'view_table', 'view_history', 'export'],
+    requests: ['view_advance', 'view_fertilizer', 'view_items', 'approve_reject', 'view_supply_profile', 'view_supply_history', 'add_remarks', 'filter_requests'],
+    configurations: ['view_fertilizer', 'view_items', 'add_fertilizer', 'add_items', 'edit_types'],
+    communication: ['view_news', 'view_notifications', 'create_news', 'create_notifications', 'edit_news', 'edit_notifications', 'delete_news', 'delete_notifications', 'schedule'],
+    userManagement: ['view_users', 'add_users', 'edit_users', 'delete_users', 'assign_roles', 'reset_passwords'],
+    settings: ['view_settings', 'edit_settings', 'view_audit', 'backup_restore'],
+  },
+  Admin: {
+    dashboard: ['view_stats', 'view_graphs', 'quick_actions', 'view_activity'],
+    suppliers: ['search', 'view_table', 'view_history', 'export'],
+    requests: ['view_advance', 'view_fertilizer', 'view_items', 'approve_reject', 'view_supply_profile', 'view_supply_history', 'add_remarks', 'filter_requests'],
+    configurations: ['view_fertilizer', 'view_items', 'add_fertilizer', 'add_items', 'edit_types'],
+    communication: ['view_news', 'view_notifications', 'create_news', 'create_notifications', 'edit_news', 'edit_notifications', 'delete_news', 'delete_notifications', 'schedule'],
+    userManagement: ['view_users', 'add_users', 'edit_users', 'delete_users', 'assign_roles', 'reset_passwords'],
+    settings: [],
+  },
+  Support: {
+    dashboard: ['view_stats', 'view_graphs', 'view_activity'],
+    suppliers: [],
+    requests: ['view_advance', 'view_fertilizer', 'view_items', 'approve_reject', 'view_supply_profile', 'view_supply_history', 'add_remarks', 'filter_requests'],
+    configurations: [],
+    communication: ['view_news', 'view_notifications', 'create_news', 'create_notifications', 'edit_news', 'edit_notifications'],
+    userManagement: [],
+    settings: [],
+  },
+  Viewer: {
+    dashboard: ['view_stats', 'view_graphs', 'view_activity'],
+    suppliers: ['search', 'view_table', 'view_history'],
+    requests: ['view_advance', 'view_fertilizer', 'view_items', 'view_supply_profile', 'view_supply_history', 'filter_requests'],
+    configurations: [],
+    communication: [],
+    userManagement: [],
+    settings: [],
+  },
+}
+
 export const newsItems = [
   { id: 1, title: 'Tea Price Increase Notice',      description: 'Prices revised upward for May 2026',           created: '2026-05-01', expiry: '2026-06-01', status: 'active'  },
   { id: 2, title: 'Fertilizer Distribution Schedule', description: 'New schedule for June fertilizer distribution', created: '2026-04-25', expiry: '2026-06-15', status: 'active'  },
@@ -74,26 +224,12 @@ export const notifications = [
   { id: 3, title: 'System Maintenance',        message: 'Scheduled maintenance on June 5th',             status: 'failed'    },
 ]
 
-export const adminUsers = [
-  { id: 1, name: 'Rajitha Bandara',    role: 'Super Admin', status: 'active',   email: 'rajitha@factory.lk'  },
-  { id: 2, name: 'Chaminda Wickrama',  role: 'Manager',     status: 'active',   email: 'chaminda@factory.lk' },
-  { id: 3, name: 'Nadeeka Perera',     role: 'Viewer',      status: 'inactive', email: 'nadeeka@factory.lk'  },
-]
+export const adminUsers = systemUsers
 
-export const roles = [
-  {
-    id: 1, name: 'Super Admin',
-    permissions: { dashboard: true, suppliers: true, requests: true, configurations: true, communication: true, userManagement: true, settings: true },
-  },
-  {
-    id: 2, name: 'Manager',
-    permissions: { dashboard: true, suppliers: true, requests: true, configurations: false, communication: true, userManagement: false, settings: false },
-  },
-  {
-    id: 3, name: 'Viewer',
-    permissions: { dashboard: true, suppliers: true, requests: false, configurations: false, communication: false, userManagement: false, settings: false },
-  },
-]
+export const roles = userRoles.map(role => ({
+  ...role,
+  permissions: roleModulePermissionDefaults[role.name] || roleModulePermissionDefaults.Viewer,
+}))
 
 export const chartData = [
   { name: 'Jan', advance: 12, fertilizer: 6,  items: 4 },

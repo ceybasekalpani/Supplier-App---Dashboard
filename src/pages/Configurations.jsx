@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { fertilizerTypes, itemTypes } from '../data/mockData'
 import { Pencil, X, Check, Package, Flower2 } from 'lucide-react'
+import PageHeader from '../components/ui/PageHeader'
 
 export default function Configurations() {
   const [tab, setTab] = useState('fertilizer')
@@ -75,17 +76,10 @@ export default function Configurations() {
   
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-start">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
-            Configurations Management
-          </h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Manage fertilizer types and inventory items</p>
-        </div>
-      
-        
-      </div>
+      <PageHeader
+        title="Configurations Management"
+        description="Register and edit fertilizer and item names"
+      />
 
       {/* Success Toast */}
       {showSuccess && (

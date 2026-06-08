@@ -6,6 +6,15 @@
 
 /* Optional: Add base styles */
 @layer base {
+  :root {
+    --color-brand: #15803d;
+    --color-brand-dark: #166534;
+    --color-success: #059669;
+    --color-warning: #d97706;
+    --color-danger: #e11d48;
+    --color-info: #0284c7;
+  }
+
   body {
     @apply bg-white dark:bg-slate-900;
   }

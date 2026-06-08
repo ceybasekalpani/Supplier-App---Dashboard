@@ -5,33 +5,8 @@ import {
   ChevronDown, CheckCircle, AlertCircle,
   Leaf
 } from 'lucide-react'
-
-// Mock data for approved requests ready for disbursement
-const approvedAdvances = [
-  { id: 1, regNo: 'REG001', supplierName: 'Kamal Perera', approvedAmount: 50000, approvedDate: '2026-06-01', status: 'pending_issue', route: 'route_a', issued: false },
-  { id: 2, regNo: 'REG002', supplierName: 'Sunil Silva', approvedAmount: 75000, approvedDate: '2026-06-03', status: 'pending_issue', route: 'route_b', issued: false },
-  { id: 3, regNo: 'REG003', supplierName: 'Nimal Jayawardena', approvedAmount: 30000, approvedDate: '2026-06-05', status: 'pending_issue', route: 'route_a', issued: false },
-]
-
-const approvedFertilizers = [
-  { id: 1, regNo: 'REG001', supplierName: 'Kamal Perera', fertilizerType: 'Urea', approvedQty: 50, unit: 'kg', approvedDate: '2026-06-02', status: 'pending_issue', route: 'route_a', issued: false },
-  { id: 2, regNo: 'REG004', supplierName: 'Thusitha Bandara', fertilizerType: 'Potash', approvedQty: 30, unit: 'kg', approvedDate: '2026-06-04', status: 'pending_issue', route: 'route_c', issued: false },
-  { id: 3, regNo: 'REG005', supplierName: 'Ruwan Wickrama', fertilizerType: 'Super Phosphate', approvedQty: 40, unit: 'kg', approvedDate: '2026-06-06', status: 'pending_issue', route: 'route_b', issued: false },
-]
-
-const approvedItems = [
-  { id: 1, regNo: 'REG002', supplierName: 'Sunil Silva', itemType: 'Harvesting Bag', approvedQty: 100, unit: 'pcs', approvedDate: '2026-06-02', status: 'pending_issue', route: 'route_b', issued: false },
-  { id: 2, regNo: 'REG003', supplierName: 'Nimal Jayawardena', itemType: 'Pruning Shears', approvedQty: 25, unit: 'pcs', approvedDate: '2026-06-04', status: 'pending_issue', route: 'route_a', issued: false },
-  { id: 3, regNo: 'REG006', supplierName: 'Chaminda Rajapaksa', itemType: 'Leaf Collection Basket', approvedQty: 15, unit: 'pcs', approvedDate: '2026-06-06', status: 'pending_issue', route: 'route_c', issued: false },
-]
-
-// Route options
-const routes = [
-  { id: 'all', name: 'All Routes' },
-  { id: 'route_a', name: 'Route A - Kandy' },
-  { id: 'route_b', name: 'Route B - Gampola' },
-  { id: 'route_c', name: 'Route C - Nawalapitiya' },
-]
+import { approvedAdvances, approvedFertilizers, approvedItems, routeOptions } from '../data/mockData'
+import { downloadPdf } from '../utils/pdf'
 
 const formatDisplayDate = (date) => {
   if (!date) return 'Not set'
@@ -165,102 +140,7 @@ Thank you for your partnership with Ceylon Tea Factory
     `
   }
 
-  const escapePdfText = (text) => {
-    return String(text)
-      .replace(/\\/g, '\\\\')
-      .replace(/\(/g, '\\(')
-      .replace(/\)/g, '\\)')
-  }
-
-  const wrapPdfLine = (line, maxLength = 86) => {
-    if (line.length <= maxLength) return [line]
-
-    const words = line.split(' ')
-    const lines = []
-    let current = ''
-
-    words.forEach(word => {
-      const next = current ? `${current} ${word}` : word
-      if (next.length > maxLength) {
-        if (current) lines.push(current)
-        current = word
-      } else {
-        current = next
-      }
-    })
-
-    if (current) lines.push(current)
-    return lines
-  }
-
-  const createPdfBlob = (content) => {
-    const rawLines = content.trim().split('\n').flatMap(line => wrapPdfLine(line.trimEnd()))
-    const linesPerPage = 48
-    const pages = []
-
-    for (let i = 0; i < rawLines.length; i += linesPerPage) {
-      pages.push(rawLines.slice(i, i + linesPerPage))
-    }
-
-    const objects = []
-    const pageObjectIds = []
-    const addObject = (body) => {
-      objects.push(body)
-      return objects.length
-    }
-
-    const catalogId = addObject('')
-    const pagesId = addObject('')
-    const fontId = addObject('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>')
-
-    pages.forEach(pageLines => {
-      const stream = [
-        'BT',
-        '/F1 11 Tf',
-        '50 790 Td',
-        '14 TL',
-        ...pageLines.map(line => `(${escapePdfText(line || ' ')}) Tj T*`),
-        'ET',
-      ].join('\n')
-      const contentId = addObject(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`)
-      const pageId = addObject(`<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 ${fontId} 0 R >> >> /Contents ${contentId} 0 R >>`)
-      pageObjectIds.push(pageId)
-    })
-
-    objects[catalogId - 1] = `<< /Type /Catalog /Pages ${pagesId} 0 R >>`
-    objects[pagesId - 1] = `<< /Type /Pages /Kids [${pageObjectIds.map(id => `${id} 0 R`).join(' ')}] /Count ${pageObjectIds.length} >>`
-
-    let pdf = '%PDF-1.4\n'
-    const offsets = [0]
-
-    objects.forEach((body, index) => {
-      offsets.push(pdf.length)
-      pdf += `${index + 1} 0 obj\n${body}\nendobj\n`
-    })
-
-    const xrefStart = pdf.length
-    pdf += `xref\n0 ${objects.length + 1}\n`
-    pdf += '0000000000 65535 f \n'
-    offsets.slice(1).forEach(offset => {
-      pdf += `${String(offset).padStart(10, '0')} 00000 n \n`
-    })
-    pdf += `trailer\n<< /Size ${objects.length + 1} /Root ${catalogId} 0 R >>\nstartxref\n${xrefStart}\n%%EOF`
-
-    return new Blob([pdf], { type: 'application/pdf' })
-  }
-
-  // Helper function to download a PDF file
-  const downloadFile = (content, filename) => {
-    const blob = createPdfBlob(content)
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = filename
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-  }
+  const downloadFile = downloadPdf
 
   // Bulk download all documents as separate files
   const handleBulkDownload = async (type, items) => {
@@ -584,7 +464,7 @@ Thank you for your partnership with Ceylon Tea Factory
               onChange={(e) => setSelectedRoute(e.target.value)}
               className="appearance-none bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-4 py-2 pr-8 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-green-600 cursor-pointer"
             >
-              {routes.map(route => (
+              {routeOptions.map(route => (
                 <option key={route.id} value={route.id}>{route.name}</option>
               ))}
             </select>
