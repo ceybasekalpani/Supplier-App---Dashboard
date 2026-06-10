@@ -1,0 +1,46 @@
+Attached Element Context from Integrated Browser
+
+Element: html.dark
+
+URL: http://localhost:5173/
+
+HTML Path: html.dark
+
+Outer HTML:
+```html
+<html lang="en" class="dark"><head>
+    <script type="module">import { injectIntoGlobalHook } from "/@react-refresh";
+injectIntoGlobalHook(window);
+window.$RefreshReg$ = () => {};
+window.$RefreshSig$ = () => (type) => type;</script>
+
+    <script type="module" src="/@vite/client"></script>
+
+    <meta charset="UTF-8">
+    <link rel="icon" type="image/svg+xml" href="/vite.svg">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tea Factory Admin</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  
+</body></html>
+```
+
+Dimensions:
+- top: 0px
+- left: 0px
+- width: 1114px
+- height: 8px
+
+CSS:
+```css
+
+
+/* Resolved values */
+display: block;
+height: 8px;
+view-transition-name: root /*UA*/;
+width: 1113.6px;
+```

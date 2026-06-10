@@ -1,301 +1,501 @@
-import { useState } from 'react'
-import { Search, Package, Droplet, ShoppingBag, CheckCircle, XCircle, Clock } from 'lucide-react'
-import StatusBadge from '../components/ui/StatusBadge'
+import { useEffect, useMemo, useState } from 'react'
+import {
+  AlertCircle,
+  CheckCircle,
+  Clock,
+  Droplet,
+  Lock,
+  LogIn,
+  Package,
+  RefreshCw,
+  Search,
+  ShoppingBag,
+  UserRound,
+  XCircle,
+} from 'lucide-react'
 import Avatar from '../components/ui/Avatar'
-import { suppliers, advanceRequests, fertilizerRequests, itemRequests } from '../data/mockData'
+import PageHeader from '../components/ui/PageHeader'
+import StatusBadge from '../components/ui/StatusBadge'
+import { authApi } from '../services/authApi'
+import { supplierDashboardApi } from '../services/supplierDashboardApi'
+import { formatCurrency, formatDisplayDate, formatQuantity } from '../utils/formatters'
 
-export default function Suppliers() {
-  const [search, setSearch] = useState('')
-  const [selected, setSelected] = useState(null)
-  const [requestType, setRequestType] = useState('advance') // 'advance', 'fertilizer', 'item'
+const REQUEST_TYPES = [
+  { id: 'advance', label: 'Advance', icon: Droplet, tone: 'amber' },
+  { id: 'fertilizer', label: 'Fertilizer', icon: Package, tone: 'green' },
+  { id: 'item', label: 'Items', icon: ShoppingBag, tone: 'blue' },
+]
 
-  const filtered = suppliers.filter(s =>
-    s.name.toLowerCase().includes(search.toLowerCase()) ||
-    s.regNo.toLowerCase().includes(search.toLowerCase()) ||
-    s.route.toLowerCase().includes(search.toLowerCase())
-  )
+const REQUEST_COLLECTION = {
+  advance: 'advanceRequests',
+  fertilizer: 'fertilizerRequests',
+  item: 'itemRequests',
+}
 
-  const activeMonth = new Date().toISOString().slice(0, 7)
-  const previousMonthDate = new Date()
-  previousMonthDate.setMonth(previousMonthDate.getMonth() - 1)
-  const previousMonth = previousMonthDate.toISOString().slice(0, 7)
+const EMPTY_DASH = '-'
 
-  const isActiveOrPreviousMonth = (date) => {
-    const month = date?.slice(0, 7)
-    return month === activeMonth || month === previousMonth
-  }
+const monthLabel = (month) => {
+  if (!month) return EMPTY_DASH
 
-  // Get current and previous month requests for selected supplier based on type
-  const getRequestsForSupplier = () => {
-    if (!selected) return []
-    
-    switch(requestType) {
-      case 'advance':
-        return advanceRequests.filter(req => req.regNo === selected.regNo && isActiveOrPreviousMonth(req.date))
-      case 'fertilizer':
-        return fertilizerRequests.filter(req => req.regNo === selected.regNo && isActiveOrPreviousMonth(req.date))
-      case 'item':
-        return itemRequests.filter(req => req.regNo === selected.regNo && isActiveOrPreviousMonth(req.date))
-      default:
-        return []
-    }
-  }
+  return new Date(`${month}-01T00:00:00`).toLocaleDateString('en-LK', {
+    month: 'short',
+    year: 'numeric',
+  })
+}
 
-  const getStatusIcon = (status) => {
-    switch(status) {
-      case 'approved':
-        return <CheckCircle size={14} className="text-green-500" />
-      case 'rejected':
-        return <XCircle size={14} className="text-red-500" />
-      default:
-        return <Clock size={14} className="text-amber-500" />
-    }
-  }
+const getRequestTitle = (request, type) => {
+  if (type === 'advance') return formatCurrency(request.amount)
+  return `${request.type || 'Request'} - ${formatQuantity(request.qty, request.unit)}`
+}
 
-  const getStatusColor = (status) => {
-    switch(status) {
-      case 'approved': return 'text-green-600 dark:text-green-400'
-      case 'rejected': return 'text-red-600 dark:text-red-400'
-      default: return 'text-amber-600 dark:text-amber-400'
-    }
+const getStatusIcon = (status) => {
+  if (status === 'approved') return <CheckCircle size={14} className="text-green-600" />
+  if (status === 'rejected') return <XCircle size={14} className="text-red-600" />
+  return <Clock size={14} className="text-amber-600" />
+}
+
+const requestCounts = (supplier) => ({
+  advance: supplier?.advanceRequests?.length || 0,
+  fertilizer: supplier?.fertilizerRequests?.length || 0,
+  item: supplier?.itemRequests?.length || 0,
+})
+
+const InfoRow = ({ label, value }) => (
+  <div className="grid grid-cols-[7rem_minmax(0,1fr)] gap-3 border-b border-slate-100 py-2.5 last:border-0 dark:border-slate-700">
+    <span className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</span>
+    <span className="min-w-0 break-all text-right text-sm font-semibold leading-relaxed text-slate-700 dark:text-slate-200">
+      {value || EMPTY_DASH}
+    </span>
+  </div>
+)
+
+const SummaryPill = ({ label, value, tone }) => {
+  const styles = {
+    amber: 'bg-amber-50 text-amber-700 border-amber-200',
+    green: 'bg-green-50 text-green-700 border-green-200',
+    blue: 'bg-sky-50 text-sky-700 border-sky-200',
   }
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h2 className="text-xl font-bold text-slate-900 dark:text-white">Supplier Management</h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Manage and monitor active tea leaf suppliers</p>
+    <div className={`rounded-lg border px-3 py-2 ${styles[tone]}`}>
+      <p className="text-[11px] font-semibold uppercase tracking-wide">{label}</p>
+      <p className="mt-0.5 text-lg font-bold">{value}</p>
+    </div>
+  )
+}
+
+const AuthPrompt = ({ form, error, loading, onChange, onSubmit }) => (
+  <form onSubmit={onSubmit} className="mt-4 grid gap-3 rounded-lg border border-red-200 bg-white p-4 text-slate-700 shadow-sm sm:grid-cols-[1fr_1fr_auto] dark:border-red-900/50 dark:bg-slate-900 dark:text-slate-200">
+    <label className="space-y-1">
+      <span className="text-xs font-bold uppercase tracking-wide text-slate-400">Username</span>
+      <input
+        value={form.username}
+        onChange={event => onChange('username', event.target.value)}
+        autoComplete="username"
+        placeholder="Enter backend username"
+        className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none transition-colors focus:border-green-700 dark:border-slate-700 dark:bg-slate-800"
+      />
+    </label>
+
+    <label className="space-y-1">
+      <span className="text-xs font-bold uppercase tracking-wide text-slate-400">Password</span>
+      <input
+        type="password"
+        value={form.password}
+        onChange={event => onChange('password', event.target.value)}
+        autoComplete="current-password"
+        placeholder="Enter password"
+        className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none transition-colors focus:border-green-700 dark:border-slate-700 dark:bg-slate-800"
+      />
+    </label>
+
+    <button
+      type="submit"
+      disabled={loading}
+      className="inline-flex h-[42px] items-center justify-center gap-2 self-end rounded-lg bg-green-700 px-4 text-sm font-bold text-white transition-colors hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      {loading ? <RefreshCw size={16} className="animate-spin" /> : <LogIn size={16} />}
+      Login
+    </button>
+
+    {error && (
+      <p className="text-xs font-semibold text-red-600 sm:col-span-3">{error}</p>
+    )}
+  </form>
+)
+
+export default function Suppliers() {
+  const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [activeOnly, setActiveOnly] = useState(true)
+  const [suppliers, setSuppliers] = useState([])
+  const [selected, setSelected] = useState(null)
+  const [requestType, setRequestType] = useState('advance')
+  const [period, setPeriod] = useState({ activeMonth: '', previousMonth: '' })
+  const [loading, setLoading] = useState(true)
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [errorStatus, setErrorStatus] = useState(null)
+  const [warning, setWarning] = useState('')
+  const [dataSource, setDataSource] = useState('api')
+  const [loginForm, setLoginForm] = useState({ username: '', password: '' })
+  const [loginError, setLoginError] = useState('')
+  const [loginLoading, setLoginLoading] = useState(false)
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 350)
+    return () => window.clearTimeout(timer)
+  }, [search])
+
+  const loadSuppliers = useMemo(() => async ({ signal } = {}) => {
+    setLoading(true)
+    setError('')
+    setErrorStatus(null)
+
+    try {
+      const response = await supplierDashboardApi.listSuppliers({
+        search: debouncedSearch,
+        months: 2,
+        activeOnly,
+        signal,
+      })
+
+      setSuppliers(response.suppliers)
+      setPeriod({
+        activeMonth: response.activeMonth,
+        previousMonth: response.previousMonth,
+      })
+      setWarning(response.warning || '')
+      setDataSource(response.source || 'api')
+      setSelected(current => {
+        if (!current) return response.suppliers[0] || null
+        return response.suppliers.find(supplier => String(supplier.id) === String(current.id)) || response.suppliers[0] || null
+      })
+    } catch (loadError) {
+      if (loadError.name !== 'AbortError') {
+        setError(loadError.message || 'Unable to load suppliers')
+        setErrorStatus(loadError.status || null)
+      }
+    } finally {
+      setLoading(false)
+    }
+  }, [activeOnly, debouncedSearch])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    const timer = window.setTimeout(() => {
+      loadSuppliers({ signal: controller.signal })
+    }, 0)
+
+    return () => {
+      window.clearTimeout(timer)
+      controller.abort()
+    }
+  }, [loadSuppliers])
+
+  const handleSelectSupplier = async (supplier) => {
+    setSelected(supplier)
+    setDetailLoading(true)
+
+    try {
+      const latest = await supplierDashboardApi.getSupplier({ regNo: supplier.id, months: 2 })
+      if (!latest) return
+
+      setSelected(latest)
+      setSuppliers(current => current.map(item => (
+        String(item.id) === String(latest.id) ? latest : item
+      )))
+    } catch {
+      setSelected(supplier)
+    } finally {
+      setDetailLoading(false)
+    }
+  }
+
+  const handleLoginChange = (field, value) => {
+    setLoginForm(current => ({ ...current, [field]: value }))
+    setLoginError('')
+  }
+
+  const handleLogin = async (event) => {
+    event.preventDefault()
+    const username = loginForm.username.trim()
+
+    if (!username || !loginForm.password) {
+      setLoginError('Username and password are required.')
+      return
+    }
+
+    setLoginLoading(true)
+    setLoginError('')
+
+    try {
+      await authApi.login({ username, password: loginForm.password })
+      setLoginForm({ username: '', password: '' })
+      await loadSuppliers()
+    } catch (loginFailure) {
+      setLoginError(loginFailure.message || 'Login failed. Check username and password.')
+    } finally {
+      setLoginLoading(false)
+    }
+  }
+
+  const selectedRequests = selected?.[REQUEST_COLLECTION[requestType]] || []
+  const counts = requestCounts(selected)
+  const totalRequests = suppliers.reduce((sum, supplier) => {
+    const supplierCounts = requestCounts(supplier)
+    return sum + supplierCounts.advance + supplierCounts.fertilizer + supplierCounts.item
+  }, 0)
+
+  return (
+    <div className="space-y-5">
+      <PageHeader
+        title="Supplier Management"
+        description="Monitor active suppliers and their latest advance, fertilizer, and item requests."
+        badge="Supplier Dashboard"
+        icon={UserRound}
+      />
+
+      <div className="grid gap-3 md:grid-cols-3">
+        <SummaryPill label="Suppliers" value={suppliers.length} tone="green" />
+        <SummaryPill label="Recent Requests" value={totalRequests} tone="amber" />
+        <SummaryPill label="Request Period" value={`${monthLabel(period.previousMonth)} - ${monthLabel(period.activeMonth)}`} tone="blue" />
       </div>
 
-      <div className="flex gap-4 items-start">
-        <div className="flex-1 space-y-3">
-          <div className="flex items-center gap-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 w-64">
-            <Search size={20} className="text-slate-400" />
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search by RegNo, Name, Route…"
-              className="bg-transparent text-sm py-2 outline-none text-slate-700 dark:text-slate-300 placeholder-slate-400 w-full"
-            />
-          </div>
-
-          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200 dark:border-slate-700">
-                    {['RegNo', 'Name', 'Route', 'Phone', 'Address', 'Bank', 'Payment', 'Status'].map(h => (
-                      <th key={h} className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wide py-3 px-4">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map(s => (
-                    <tr
-                      key={s.id}
-                      onClick={() => setSelected(s)}
-                      className={`border-b border-slate-50 dark:border-slate-700/50 cursor-pointer transition-colors
-                        ${selected?.id === s.id ? 'bg-green-50 dark:bg-green-900/20' : 'hover:bg-slate-50 dark:hover:bg-slate-700/30'}`}
-                    >
-                      <td className="py-3 px-4 font-semibold text-green-600 dark:text-green-400">{s.regNo}</td>
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-2">
-                          <Avatar name={s.name} size="xs" />
-                          <span className="text-slate-700 dark:text-slate-300 font-medium">{s.name}</span>
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 text-slate-500 dark:text-slate-400">{s.route}</td>
-                      <td className="py-3 px-4 text-slate-500 dark:text-slate-400">{s.phone}</td>
-                      <td className="py-3 px-4 text-slate-500 dark:text-slate-400">{s.address}</td>
-                      <td className="py-3 px-4 text-slate-500 dark:text-slate-400">{s.bank}</td>
-                      <td className="py-3 px-4 text-slate-500 dark:text-slate-400">{s.payment}</td>
-                      <td className="py-3 px-4"><StatusBadge status={s.status} /></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+      {(warning || error) && (
+        <div
+          className={`flex items-start gap-2 rounded-xl border px-4 py-3 text-sm ${
+            error
+              ? 'border-red-200 bg-red-50 text-red-700'
+              : 'border-amber-200 bg-amber-50 text-amber-700'
+          }`}
+        >
+          {errorStatus === 401 ? <Lock size={18} className="mt-0.5 flex-shrink-0" /> : <AlertCircle size={18} className="mt-0.5 flex-shrink-0" />}
+          <div className="flex-1">
+            <p className="font-semibold">{error ? (errorStatus === 401 ? 'Authentication required' : 'Supplier data could not be loaded') : 'Using local preview data'}</p>
+            <p className="text-xs opacity-80">{error || warning}</p>
+            {errorStatus === 401 && (
+              <AuthPrompt
+                form={loginForm}
+                error={loginError}
+                loading={loginLoading}
+                onChange={handleLoginChange}
+                onSubmit={handleLogin}
+              />
+            )}
           </div>
         </div>
+      )}
 
-        {/* Detail Panel */}
-        <div className="w-80 flex-shrink-0">
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <section className="rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-700">
+            <div className="flex min-w-72 flex-1 items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 dark:border-slate-700 dark:bg-slate-900">
+              <Search size={18} className="text-slate-400" />
+              <input
+                value={search}
+                onChange={event => setSearch(event.target.value)}
+                placeholder="Search by reg no, name, or route"
+                className="w-full bg-transparent py-2.5 text-sm text-slate-700 outline-none placeholder:text-slate-400 dark:text-slate-200"
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={activeOnly}
+                  onChange={event => setActiveOnly(event.target.checked)}
+                  className="h-4 w-4 accent-green-700"
+                />
+                Active only
+              </label>
+              <button
+                type="button"
+                onClick={() => loadSuppliers()}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
+              >
+                <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+                Refresh
+              </button>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-100 bg-slate-50 dark:border-slate-700 dark:bg-slate-900">
+                  {['Reg No', 'Supplier', 'Route', 'Phone', 'Payment', 'Status'].map(heading => (
+                    <th key={heading} className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-slate-400">
+                      {heading}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-400">
+                      Loading suppliers...
+                    </td>
+                  </tr>
+                ) : suppliers.length > 0 ? (
+                  suppliers.map(supplier => {
+                    const isSelected = String(selected?.id) === String(supplier.id)
+
+                    return (
+                      <tr
+                        key={supplier.id || supplier.regNo}
+                        onClick={() => handleSelectSupplier(supplier)}
+                        className={`cursor-pointer border-b border-slate-50 transition-colors last:border-0 dark:border-slate-700/60 ${
+                          isSelected ? 'bg-green-50 dark:bg-green-900/20' : 'hover:bg-slate-50 dark:hover:bg-slate-700/30'
+                        }`}
+                      >
+                        <td className="px-4 py-3 font-bold text-green-700">{supplier.regNo}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2.5">
+                            <Avatar name={supplier.name} size="xs" />
+                            <div>
+                              <p className="font-semibold text-slate-800 dark:text-slate-100">{supplier.name || EMPTY_DASH}</p>
+                              <p className="text-xs text-slate-400">{supplier.address || 'No address'}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-slate-500 dark:text-slate-400">{supplier.route || EMPTY_DASH}</td>
+                        <td className="px-4 py-3 text-slate-500 dark:text-slate-400">{supplier.phone || EMPTY_DASH}</td>
+                        <td className="px-4 py-3 text-slate-500 dark:text-slate-400">{supplier.payment || EMPTY_DASH}</td>
+                        <td className="px-4 py-3"><StatusBadge status={supplier.status} /></td>
+                      </tr>
+                    )
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-400">
+                      No suppliers found for this search.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <aside className="space-y-4">
           {selected ? (
-            <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4 space-y-4">
-              <div className="flex items-center gap-3">
-                <Avatar name={selected.name} size="md" />
-                <div>
-                  <p className="font-bold text-slate-900 dark:text-white">{selected.name}</p>
-                  <p className="text-xs text-slate-400">{selected.regNo} · {selected.route}</p>
-                </div>
-              </div>
-              
-              <div className="border-t border-slate-100 dark:border-slate-700 pt-3 space-y-2">
-                {[
-                  ['Phone', selected.phone], 
-                  ['Address', selected.address], 
-                  ['Bank', `${selected.bank} – ${selected.branch}`], 
-                  ['Payment', selected.payment]
-                ].map(([l, v]) => (
-                  <div key={l} className="flex justify-between text-sm">
-                    <span className="text-slate-400">{l}</span>
-                    <span className="text-slate-700 dark:text-slate-300 font-medium text-right">{v}</span>
+            <>
+              <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+                <div className="flex items-start gap-3">
+                  <Avatar name={selected.name} size="lg" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="truncate text-lg font-bold text-slate-900 dark:text-white">{selected.name}</p>
+                      {detailLoading && <RefreshCw size={15} className="animate-spin text-slate-400" />}
+                    </div>
+                    <p className="text-xs font-semibold text-slate-400">{selected.regNo} / {selected.route || 'No route'}</p>
+                    <div className="mt-2">
+                      <StatusBadge status={selected.status} />
+                    </div>
                   </div>
-                ))}
-              </div>
-
-              {/* Request History with Toggle Buttons */}
-              <div className="border-t border-slate-100 dark:border-slate-700 pt-3">
-                <p className="text-xs font-semibold text-slate-400 uppercase mb-3">Request History</p>
-                <p className="text-[11px] text-slate-400 mb-3">
-                  Showing {previousMonth} and {activeMonth} requests
-                </p>
-                
-                {/* Toggle Buttons */}
-                <div className="flex gap-2 mb-4">
-                  <button
-                    onClick={() => setRequestType('advance')}
-                    className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all
-                      ${requestType === 'advance' 
-                        ? 'bg-amber-500 text-white shadow-sm' 
-                        : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
-                      }`}
-                  >
-                    <Droplet size={14} />
-                    Advance
-                  </button>
-                  <button
-                    onClick={() => setRequestType('fertilizer')}
-                    className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all
-                      ${requestType === 'fertilizer' 
-                        ? 'bg-green-500 text-white shadow-sm' 
-                        : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
-                      }`}
-                  >
-                    <Package size={14} />
-                    Fertilizer
-                  </button>
-                  <button
-                    onClick={() => setRequestType('item')}
-                    className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all
-                      ${requestType === 'item' 
-                        ? 'bg-purple-500 text-white shadow-sm' 
-                        : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
-                      }`}
-                  >
-                    <ShoppingBag size={14} />
-                    Items
-                  </button>
                 </div>
 
-                {/* Request List */}
-                <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {getRequestsForSupplier().length > 0 ? (
-                    getRequestsForSupplier().map((req, idx) => (
-                      <div key={idx} className="p-3 bg-slate-50 dark:bg-slate-700/30 rounded-lg">
-                        {requestType === 'advance' && (
-                          <div className="space-y-1">
-                            <div className="flex justify-between items-start">
-                              <div>
-                                <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                                  Rs. {req.amount?.toLocaleString()}
-                                </p>
-                                <p className="text-xs text-slate-400">{req.date}</p>
-                              </div>
-                              <div className={`flex items-center gap-1 text-xs font-medium ${getStatusColor(req.status)}`}>
-                                {getStatusIcon(req.status)}
-                                <span className="capitalize">{req.status}</span>
-                              </div>
-                            </div>
-                            {req.checkedBy !== '-' && (
-                              <p className="text-xs text-slate-400">
-                                Checked by: {req.checkedBy}
-                                {req.remarks && ` • ${req.remarks}`}
-                              </p>
-                            )}
+                <div className="mt-4 grid grid-cols-3 gap-2">
+                  <SummaryPill label="Advance" value={counts.advance} tone="amber" />
+                  <SummaryPill label="Fertilizer" value={counts.fertilizer} tone="green" />
+                  <SummaryPill label="Items" value={counts.item} tone="blue" />
+                </div>
+
+               
+              </section>
+
+              <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+                <p className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-400">Supplier Details</p>
+                <div className="space-y-1">
+                  <InfoRow label="Phone" value={selected.phone} />
+                  <InfoRow label="Other Phone" value={[selected.phone2, selected.phone3].filter(Boolean).join(', ')} />
+                  <InfoRow label="Address" value={selected.address} />
+                  <InfoRow label="Payment" value={selected.payment} />
+                  <InfoRow label="Bank" value={selected.bank} />
+                  <InfoRow label="Branch" value={selected.branch} />
+                  <InfoRow label="Account" value={selected.accountNo} />
+                </div>
+              </section>
+
+              <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <p className="text-xs font-bold uppercase tracking-wide text-slate-400">Request History</p>
+                </div>
+
+                <div className="mb-4 grid grid-cols-3 gap-2">
+                  {REQUEST_TYPES.map(type => {
+                    const Icon = type.icon
+                    const active = requestType === type.id
+
+                    return (
+                      <button
+                        key={type.id}
+                        type="button"
+                        onClick={() => setRequestType(type.id)}
+                        className={`flex items-center justify-center gap-1.5 rounded-lg border px-2 py-2 text-xs font-bold transition-colors ${
+                          active
+                            ? 'border-green-700 bg-green-700 text-white'
+                            : 'border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
+                        }`}
+                      >
+                        <Icon size={14} />
+                        {type.label}
+                      </button>
+                    )
+                  })}
+                </div>
+
+                <div className="max-h-[26rem] space-y-2 overflow-y-auto pr-1">
+                  {selectedRequests.length > 0 ? (
+                    selectedRequests.map(request => (
+                      <div key={`${requestType}-${request.id}-${request.date}`} className="rounded-lg border border-slate-100 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-bold text-slate-800 dark:text-slate-100">{getRequestTitle(request, requestType)}</p>
+                            <p className="mt-0.5 text-xs text-slate-400">
+                              {request.requestNo ? `${request.requestNo} / ` : ''}{formatDisplayDate(request.date)}
+                            </p>
                           </div>
-                        )}
-                        
-                        {requestType === 'fertilizer' && (
-                          <div className="space-y-1">
-                            <div className="flex justify-between items-start">
-                              <div>
-                                <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                                  {req.type} - {req.qty} {req.unit}
-                                </p>
-                                <p className="text-xs text-slate-400">{req.date}</p>
-                              </div>
-                              <div className={`flex items-center gap-1 text-xs font-medium ${getStatusColor(req.status)}`}>
-                                {getStatusIcon(req.status)}
-                                <span className="capitalize">{req.status}</span>
-                              </div>
-                            </div>
-                            {req.checkedBy !== '-' && (
-                              <p className="text-xs text-slate-400">Checked by: {req.checkedBy}</p>
-                            )}
+                          <div className="flex items-center gap-1 text-xs font-bold capitalize text-slate-600 dark:text-slate-300">
+                            {getStatusIcon(request.status)}
+                            {request.status}
                           </div>
-                        )}
-                        
-                        {requestType === 'item' && (
-                          <div className="space-y-1">
-                            <div className="flex justify-between items-start">
-                              <div>
-                                <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                                  {req.type} - {req.qty} {req.unit}
-                                </p>
-                                <p className="text-xs text-slate-400">{req.date}</p>
-                              </div>
-                              <div className={`flex items-center gap-1 text-xs font-medium ${getStatusColor(req.status)}`}>
-                                {getStatusIcon(req.status)}
-                                <span className="capitalize">{req.status}</span>
-                              </div>
-                            </div>
-                            {req.checkedBy !== '-' && (
-                              <p className="text-xs text-slate-400">Checked by: {req.checkedBy}</p>
-                            )}
+                        </div>
+
+                        <div className="mt-3 grid gap-2 rounded-md bg-white p-2 text-xs dark:bg-slate-800">
+                          <div className="flex justify-between gap-3">
+                            <span className="text-slate-400">Checked by</span>
+                            <span className="font-semibold text-slate-600 dark:text-slate-300">{request.checkedBy || EMPTY_DASH}</span>
                           </div>
-                        )}
+                          <div className="flex justify-between gap-3">
+                            <span className="text-slate-400">Remarks</span>
+                            <span className="max-w-[13rem] text-right font-semibold text-slate-600 dark:text-slate-300">{request.remarks || EMPTY_DASH}</span>
+                          </div>
+                        </div>
                       </div>
                     ))
                   ) : (
-                    <div className="text-center py-6 text-slate-400">
-                      <p className="text-sm">No {requestType} requests found</p>
+                    <div className="rounded-lg border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-400 dark:border-slate-700">
+                      No {REQUEST_TYPES.find(type => type.id === requestType)?.label.toLowerCase()} requests in this period.
                     </div>
                   )}
                 </div>
-
-                {/* Summary Stats */}
-                <div className="border-t border-slate-100 dark:border-slate-700 pt-3 mt-3">
-                  <div className="grid grid-cols-3 gap-2 text-center">
-                    <div>
-                      <p className="text-xs text-slate-400">Advance</p>
-                      <p className="text-sm font-bold text-amber-600 dark:text-amber-400">
-                        {advanceRequests.filter(r => r.regNo === selected.regNo && isActiveOrPreviousMonth(r.date)).length}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-400">Fertilizer</p>
-                      <p className="text-sm font-bold text-green-600 dark:text-green-400">
-                        {fertilizerRequests.filter(r => r.regNo === selected.regNo && isActiveOrPreviousMonth(r.date)).length}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-400">Items</p>
-                      <p className="text-sm font-bold text-purple-600 dark:text-purple-400">
-                        {itemRequests.filter(r => r.regNo === selected.regNo && isActiveOrPreviousMonth(r.date)).length}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+              </section>
+            </>
           ) : (
-            <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-8 text-center text-slate-400">
-              <Search size={32} className="mx-auto mb-2 opacity-40" />
-              <p className="text-sm">Select a supplier to view details</p>
-            </div>
+            <section className="rounded-xl border border-dashed border-slate-200 bg-white p-8 text-center shadow-sm dark:border-slate-700 dark:bg-slate-800">
+              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400 dark:bg-slate-900">
+                <Search size={24} />
+              </div>
+              <p className="font-semibold text-slate-700 dark:text-slate-200">Select a supplier</p>
+              <p className="mt-1 text-sm text-slate-400">Supplier profile and database request history will appear here.</p>
+            </section>
           )}
-        </div>
+
+        </aside>
       </div>
     </div>
   )
