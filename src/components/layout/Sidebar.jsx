@@ -14,7 +14,7 @@ const navItems = [
   { to: '/configurations', label: 'Configurations',  icon: Settings2       },
   { to: '/communication',  label: 'Communication',   icon: MessageCircle   },
   { to: '/user-management',label: 'User Management', icon: UserCheck       },
-  { to: '/settings',       label: 'Settings',        icon: SlidersHorizontal},
+  { to: '/settings',       label: 'Permission Management', icon: SlidersHorizontal},
 ]
 
 export default function Sidebar({ collapsed, onToggle }) {

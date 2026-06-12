@@ -111,7 +111,7 @@ export async function apiRequest(path, options = {}) {
     const message = await readErrorMessage(response)
     const error = new Error(
       response.status === 401 && !skipAuth
-        ? 'Login required. The supplier dashboard API is protected, and no valid JWT token was found in this browser session.'
+        ? 'Login required. The dashboard API is protected, and no valid JWT token was found in this browser session.'
         : message
     )
     error.status = response.status

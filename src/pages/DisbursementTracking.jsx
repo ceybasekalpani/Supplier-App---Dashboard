@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   AlertCircle,
   Banknote,
@@ -7,12 +7,13 @@ import {
   Eye,
   Leaf,
   Package,
+  RefreshCw,
   Search,
   Sprout,
   Timer,
   X,
 } from 'lucide-react'
-import { getStoredTrackingRows, saveTrackingRows } from '../data/disbursementTracking'
+import { disbursementApi } from '../services/disbursementApi'
 
 const typeStyles = {
   advance: {
@@ -269,53 +270,81 @@ function TrackingDetailsModal({ item, onClose }) {
 }
 
 export default function DisbursementTracking() {
-  const [trackingRows, setTrackingRows] = useState(getStoredTrackingRows)
+  const [trackingRows, setTrackingRows] = useState([])
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [typeFilter, setTypeFilter] = useState('all')
   const [searchTerm, setSearchTerm] = useState('')
   const [showSuccess, setShowSuccess] = useState(null)
+  const [showError, setShowError] = useState(null)
+  const [trackingLoading, setTrackingLoading] = useState(true)
+  const [receivingId, setReceivingId] = useState(null)
   const [viewingItem, setViewingItem] = useState(null)
 
-  const markReceived = (id) => {
-    const completedDate = new Date().toISOString().slice(0, 10)
+  useEffect(() => {
+    const controller = new AbortController()
+
+    disbursementApi
+      .getTracking({
+        issuedType: typeFilter,
+        status: statusFilter,
+        search: searchTerm,
+        fromDate: dateFrom,
+        toDate: dateTo,
+        signal: controller.signal,
+      })
+      .then(result => {
+        setTrackingRows(result)
+      })
+      .catch(error => {
+        if (error.name !== 'AbortError') {
+          setShowError(error.message || 'Unable to load disbursement tracking')
+          setTimeout(() => setShowError(null), 3000)
+        }
+      })
+      .finally(() => {
+        setTrackingLoading(false)
+      })
+
+    return () => {
+      controller.abort()
+    }
+  }, [dateFrom, dateTo, searchTerm, statusFilter, typeFilter])
+
+  const markReceived = async (id) => {
     const completedBy = getCompletedUser()
     const completedDevice = getDeviceName()
 
-    setTrackingRows(prev => {
-      const nextRows = prev.map(item => (
-        item.id === id
-          ? { ...item, currentStatus: 'completed', completedDate, completedBy, completedDevice }
-          : item
-      ))
-      saveTrackingRows(nextRows)
-      return nextRows
-    })
-    if (statusFilter === 'awaiting') {
-      setStatusFilter('all')
+    setReceivingId(id)
+    setShowError(null)
+
+    try {
+      const updated = await disbursementApi.markReceived({ id, completedBy, completedDevice })
+
+      setTrackingRows(prev => prev.map(item => (
+        item.id === id ? updated : item
+      )))
+      setViewingItem(current => current?.id === id ? updated : current)
+      if (statusFilter === 'awaiting') {
+        setTrackingLoading(true)
+        setStatusFilter('all')
+      }
+      setShowSuccess('Receipt confirmed successfully')
+      setTimeout(() => setShowSuccess(null), 2500)
+    } catch (error) {
+      setShowError(error.message || 'Unable to confirm receipt')
+      setTimeout(() => setShowError(null), 3000)
+    } finally {
+      setReceivingId(null)
     }
-    setShowSuccess('Receipt confirmed successfully')
-    setTimeout(() => setShowSuccess(null), 2500)
   }
 
   const viewDetails = (item) => {
     setViewingItem(item)
   }
 
-  const filteredRows = trackingRows.filter(item => {
-    const matchesDateFrom = !dateFrom || item.issueDate >= dateFrom
-    const matchesDateTo = !dateTo || item.issueDate <= dateTo
-    const matchesStatus = statusFilter === 'all' || item.currentStatus === statusFilter
-    const matchesType = typeFilter === 'all' || item.issuedType === typeFilter
-    const search = searchTerm.trim().toLowerCase()
-    const matchesSearch = !search ||
-      item.regNo.toLowerCase().includes(search) ||
-      item.supplierName.toLowerCase().includes(search) ||
-      item.issuedDetails.toLowerCase().includes(search)
-
-    return matchesDateFrom && matchesDateTo && matchesStatus && matchesType && matchesSearch
-  })
+  const filteredRows = trackingRows
 
   const completedCount = filteredRows.filter(item => item.currentStatus === 'completed').length
   const awaitingCount = filteredRows.filter(item => item.currentStatus === 'awaiting').length
@@ -327,6 +356,20 @@ export default function DisbursementTracking() {
       {showSuccess && (
         <div className="fixed bottom-6 right-6 bg-green-700 text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-2 z-50">
           <CheckCircle size={16} /> {showSuccess}
+        </div>
+      )}
+      {showError && (
+        <div className="fixed bottom-6 right-6 bg-red-600 text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-2 z-50">
+          <AlertCircle size={16} /> {showError}
+        </div>
+      )}
+
+      {trackingLoading && (
+        <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+          <span className="inline-flex items-center gap-2">
+            <RefreshCw size={15} className="animate-spin" />
+            Loading disbursement tracking records...
+          </span>
         </div>
       )}
 
@@ -366,14 +409,20 @@ export default function DisbursementTracking() {
             <input
               type="search"
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => {
+                setTrackingLoading(true)
+                setSearchTerm(e.target.value)
+              }}
               placeholder="Search supplier, reg no, or item"
               className="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 pl-9 pr-3 py-2 text-sm text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-green-600"
             />
           </div>
           <select
             value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value)}
+            onChange={(e) => {
+              setTrackingLoading(true)
+              setTypeFilter(e.target.value)
+            }}
             className="rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-green-600"
           >
             <option value="all">All Types</option>
@@ -383,7 +432,10 @@ export default function DisbursementTracking() {
           </select>
           <select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={(e) => {
+              setTrackingLoading(true)
+              setStatusFilter(e.target.value)
+            }}
             className="rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-green-600"
           >
             <option value="all">All Status</option>
@@ -395,7 +447,10 @@ export default function DisbursementTracking() {
             <input
               type="date"
               value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
+              onChange={(e) => {
+                setTrackingLoading(true)
+                setDateFrom(e.target.value)
+              }}
               className="rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-green-600"
             />
           </label>
@@ -404,7 +459,10 @@ export default function DisbursementTracking() {
             <input
               type="date"
               value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
+              onChange={(e) => {
+                setTrackingLoading(true)
+                setDateTo(e.target.value)
+              }}
               className="rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-green-600"
             />
           </label>
@@ -445,7 +503,8 @@ export default function DisbursementTracking() {
                 </tr>
               ) : (
                 filteredRows.map(item => {
-                  const TypeIcon = typeStyles[item.issuedType].icon
+                  const typeStyle = typeStyles[item.issuedType] || typeStyles.items
+                  const TypeIcon = typeStyle.icon
                   const parsedValue = parseTrackingValue(item)
                   const quantityOrAmount = item.issuedType === 'advance'
                     ? formatCurrency(parsedValue.value)
@@ -459,7 +518,7 @@ export default function DisbursementTracking() {
                         <p className="text-xs text-slate-500">{item.route}</p>
                       </td>
                       <td className="py-3 px-4">
-                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${typeStyles[item.issuedType].className}`}>
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${typeStyle.className}`}>
                           <TypeIcon size={12} />
                           {parsedValue.name}
                         </span>
@@ -489,9 +548,11 @@ export default function DisbursementTracking() {
                           {item.currentStatus === 'awaiting' && (
                             <button
                               onClick={() => markReceived(item.id)}
-                              className="inline-flex items-center gap-1.5 rounded-lg bg-green-700 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-green-800"
+                              disabled={receivingId === item.id}
+                              className="inline-flex items-center gap-1.5 rounded-lg bg-green-700 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-70"
                             >
-                              <CheckCircle2 size={12} /> Mark Received
+                              {receivingId === item.id ? <RefreshCw size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
+                              Mark Received
                             </button>
                           )}
                         </div>

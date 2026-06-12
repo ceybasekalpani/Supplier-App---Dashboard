@@ -1,6 +1,7 @@
 import { env } from '../config/env'
 import { advanceRequests, fertilizerRequests, itemRequests, suppliers } from '../data/mockData'
-import { apiRequest, shouldUseApi } from './apiClient'
+import { adminApiRequest } from './adminApiClient'
+import { shouldUseApi } from './apiClient'
 
 const getValue = (source, camelKey, pascalKey = camelKey[0].toUpperCase() + camelKey.slice(1)) => (
   source?.[camelKey] ?? source?.[pascalKey]
@@ -13,18 +14,18 @@ const normalizeRequest = (request, kind) => {
     id: getValue(request, 'id') ?? getValue(request, 'requestNo') ?? `${kind}-${Math.random()}`,
     requestNo: String(getValue(request, 'requestNo') || ''),
     regNo: String(getValue(request, 'regNo') || ''),
-    type: String(getValue(request, 'type') || ''),
+    type: String(getValue(request, 'type') || getValue(request, 'itemType') || getValue(request, 'fertilizerType') || ''),
     month: String(getValue(request, 'month') || ''),
-    date: String(getValue(request, 'date') || ''),
+    date: String(getValue(request, 'date') || getValue(request, 'requestDate') || ''),
     status: normalizeStatus(getValue(request, 'status')),
-    checkedBy: String(getValue(request, 'checkedBy') || '-'),
+    checkedBy: String(getValue(request, 'checkedBy') || getValue(request, 'approvedBy') || '-'),
     remarks: getValue(request, 'remarks') || '',
   }
 
   if (kind === 'advance') {
     normalized.amount = Number(getValue(request, 'amount') || 0)
   } else {
-    normalized.qty = Number(getValue(request, 'qty') || 0)
+    normalized.qty = Number(getValue(request, 'qty') || getValue(request, 'quantity') || 0)
     normalized.unit = String(getValue(request, 'unit') || '')
   }
 
@@ -34,11 +35,11 @@ const normalizeRequest = (request, kind) => {
 const normalizeSupplier = (supplier) => ({
   id: getValue(supplier, 'id') ?? getValue(supplier, 'regNo'),
   regNo: String(getValue(supplier, 'regNo') || ''),
-  name: String(getValue(supplier, 'name') || ''),
+  name: String(getValue(supplier, 'name') || getValue(supplier, 'regName') || ''),
   route: String(getValue(supplier, 'route') || ''),
-  phone: String(getValue(supplier, 'phone') || ''),
-  phone2: getValue(supplier, 'phone2') || '',
-  phone3: getValue(supplier, 'phone3') || '',
+  phone: String(getValue(supplier, 'phone') || getValue(supplier, 'telNo') || ''),
+  phone2: getValue(supplier, 'phone2') || getValue(supplier, 'telNo_2') || '',
+  phone3: getValue(supplier, 'phone3') || getValue(supplier, 'telNo_3') || '',
   address: String(getValue(supplier, 'address') || ''),
   bank: String(getValue(supplier, 'bank') || ''),
   branch: String(getValue(supplier, 'branch') || ''),
@@ -57,12 +58,14 @@ const buildMockResponse = ({ search = '', months = 2, activeOnly = true } = {}) 
   const activeMonth = getMonthKey(today)
   const previousMonthDate = new Date(today.getFullYear(), today.getMonth() - 1, 1)
   const previousMonth = getMonthKey(previousMonthDate)
+
   const visibleMonths = new Set(
     Array.from({ length: months }, (_, index) => {
       const month = new Date(today.getFullYear(), today.getMonth() - index, 1)
       return getMonthKey(month)
     })
   )
+
   const term = search.trim().toLowerCase()
 
   const visibleSuppliers = suppliers
@@ -112,7 +115,10 @@ const withMockFallback = async (request, mockFactory) => {
     }
 
     if (env.enableMockData) {
-      return { ...mockFactory(), warning: error.message }
+      return {
+        ...mockFactory(),
+        warning: error.message,
+      }
     }
 
     throw error
@@ -132,7 +138,11 @@ export const supplierDashboardApi = {
           params.set('search', search.trim())
         }
 
-        const response = await apiRequest(`/api/SupplierDashboard/suppliers?${params.toString()}`, { signal })
+        const response = await adminApiRequest(`/api/SupplierDashboard/suppliers?${params.toString()}`, {
+          method: 'GET',
+          signal,
+        })
+
         return normalizeResponse(response)
       },
       () => buildMockResponse({ search, months, activeOnly })
@@ -142,7 +152,11 @@ export const supplierDashboardApi = {
   getSupplier: ({ regNo, months = 2, signal } = {}) => (
     withMockFallback(
       async () => {
-        const response = await apiRequest(`/api/SupplierDashboard/suppliers/${regNo}?months=${months}`, { signal })
+        const response = await adminApiRequest(`/api/SupplierDashboard/suppliers/${regNo}?months=${months}`, {
+          method: 'GET',
+          signal,
+        })
+
         return normalizeSupplier(response)
       },
       () => buildMockResponse({ months, activeOnly: false }).suppliers.find(supplier => (

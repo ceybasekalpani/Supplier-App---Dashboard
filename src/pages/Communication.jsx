@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Bell,
   CalendarDays,
@@ -9,6 +9,7 @@ import {
   MessageSquare,
   Newspaper,
   Pencil,
+  RefreshCw,
   Send,
   Trash2,
   X,
@@ -16,7 +17,7 @@ import {
 import PageHeader from '../components/ui/PageHeader'
 import StatusBadge from '../components/ui/StatusBadge'
 import Toggle from '../components/ui/Toggle'
-import { newsItems as initialNewsItems, notifications as initialNotifications } from '../data/mockData'
+import { communicationsApi } from '../services/communicationsApi'
 
 const tabs = [
   { id: 'news', label: 'News', icon: Newspaper },
@@ -126,12 +127,16 @@ export default function Communication() {
   const [newsFilter, setNewsFilter] = useState('all')
   const [notifFilter, setNotifFilter] = useState('all')
   const [active, setActive] = useState(true)
-  const [newsItems, setNewsItems] = useState(initialNewsItems)
-  const [notifications, setNotifications] = useState(initialNotifications)
+  const [newsItems, setNewsItems] = useState([])
+  const [notifications, setNotifications] = useState([])
   const [newsForm, setNewsForm] = useState({ title: '', description: '', expiryDate: '' })
   const [notifForm, setNotifForm] = useState({ title: '', message: '', schedule: '' })
   const [editingNews, setEditingNews] = useState(null)
   const [editingNotif, setEditingNotif] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [deletingKey, setDeletingKey] = useState('')
+  const [refreshKey, setRefreshKey] = useState(0)
   const [toast, setToast] = useState(null)
 
   const filteredNews = newsItems.filter(item => newsFilter === 'all' || item.status === newsFilter)
@@ -144,7 +149,28 @@ export default function Communication() {
     setTimeout(() => setToast(null), 3000)
   }
 
-  const simulateSendNotification = () => (Math.random() < 0.9 ? 'delivered' : 'failed')
+  useEffect(() => {
+    const controller = new AbortController()
+
+    communicationsApi
+      .getAll({ signal: controller.signal })
+      .then(result => {
+        setNewsItems(result.news)
+        setNotifications(result.notifications)
+      })
+      .catch(error => {
+        if (error.name !== 'AbortError') {
+          showToast(error.message || 'Unable to load communication records.', 'error')
+        }
+      })
+      .finally(() => {
+        setLoading(false)
+      })
+
+    return () => {
+      controller.abort()
+    }
+  }, [refreshKey])
 
   const handleDiscard = () => {
     setEditingNews(null)
@@ -159,7 +185,14 @@ export default function Communication() {
     handleDiscard()
   }
 
-  const handleCreateNews = () => {
+  const refreshCommunications = () => {
+    setLoading(true)
+    setRefreshKey(current => current + 1)
+  }
+
+  const handleCreateNews = async () => {
+    if (saving) return
+
     if (!newsForm.title.trim() || !newsForm.description.trim()) {
       showToast('Please fill in all required fields.', 'error')
       return
@@ -170,19 +203,20 @@ export default function Communication() {
       return
     }
 
-    const newNews = {
-      id: Date.now(),
-      title: newsForm.title.trim(),
-      description: newsForm.description.trim(),
-      created: getTodayDate(),
-      expiry: newsForm.expiryDate || 'No expiry',
-      status: active ? 'active' : 'draft',
-    }
+    setSaving(true)
 
-    setNewsItems(prev => [newNews, ...prev])
-    setNewsForm({ title: '', description: '', expiryDate: '' })
-    setActive(true)
-    showToast('News created successfully.')
+    try {
+      const newNews = await communicationsApi.createNews({ ...newsForm, active })
+
+      setNewsItems(prev => [newNews, ...prev])
+      setNewsForm({ title: '', description: '', expiryDate: '' })
+      setActive(true)
+      showToast('News created successfully.')
+    } catch (error) {
+      showToast(error.message || 'Unable to create news.', 'error')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleEditNews = (news) => {
@@ -200,7 +234,9 @@ export default function Communication() {
     setActive(news.status === 'active')
   }
 
-  const handleUpdateNews = () => {
+  const handleUpdateNews = async () => {
+    if (saving || !editingNews) return
+
     if (!newsForm.title.trim() || !newsForm.description.trim()) {
       showToast('Please fill in all required fields.', 'error')
       return
@@ -211,34 +247,48 @@ export default function Communication() {
       return
     }
 
-    setNewsItems(prev => prev.map(item =>
-      item.id === editingNews.id
-        ? {
-            ...item,
-            title: newsForm.title.trim(),
-            description: newsForm.description.trim(),
-            expiry: newsForm.expiryDate || 'No expiry',
-            status: active ? 'active' : 'draft',
-          }
-        : item
-    ))
+    setSaving(true)
 
-    handleDiscard()
-    showToast('News updated successfully.')
+    try {
+      const updatedNews = await communicationsApi.updateNews(editingNews.id, { ...newsForm, active })
+
+      setNewsItems(prev => prev.map(item =>
+        item.id === editingNews.id ? updatedNews : item
+      ))
+
+      handleDiscard()
+      showToast('News updated successfully.')
+    } catch (error) {
+      showToast(error.message || 'Unable to update news.', 'error')
+    } finally {
+      setSaving(false)
+    }
   }
 
-  const handleDeleteNews = (id, status) => {
+  const handleDeleteNews = async (id, status) => {
     const message = status === 'expired'
       ? 'This news is expired. Do you still want to delete it?'
       : 'Are you sure you want to delete this news?'
 
     if (window.confirm(message)) {
-      setNewsItems(prev => prev.filter(item => item.id !== id))
-      showToast(status === 'expired' ? 'Expired news deleted.' : 'News deleted successfully.')
+      const deleteKey = `news-${id}`
+      setDeletingKey(deleteKey)
+
+      try {
+        await communicationsApi.deleteNews(id)
+        setNewsItems(prev => prev.filter(item => item.id !== id))
+        showToast(status === 'expired' ? 'Expired news deleted.' : 'News deleted successfully.')
+      } catch (error) {
+        showToast(error.message || 'Unable to delete news.', 'error')
+      } finally {
+        setDeletingKey('')
+      }
     }
   }
 
-  const handleSendNotification = () => {
+  const handleSendNotification = async () => {
+    if (saving) return
+
     if (!notifForm.title.trim() || !notifForm.message.trim()) {
       showToast('Please fill in title and message.', 'error')
       return
@@ -252,59 +302,70 @@ export default function Communication() {
       }
     }
 
-    const deliveryStatus = simulateSendNotification()
-    const scheduledDateTime = notifForm.schedule
-      ? new Date(notifForm.schedule).toLocaleString()
-      : new Date().toLocaleString()
+    setSaving(true)
 
-    const newNotif = {
-      id: Date.now(),
-      title: notifForm.title.trim(),
-      message: notifForm.message.trim(),
-      status: notifForm.schedule ? 'scheduled' : deliveryStatus,
-      scheduledFor: scheduledDateTime,
-      sentAt: !notifForm.schedule ? new Date().toLocaleString() : null,
+    try {
+      const newNotif = await communicationsApi.createNotification(notifForm)
+
+      setNotifications(prev => [newNotif, ...prev])
+      setNotifForm({ title: '', message: '', schedule: '' })
+      showToast(notifForm.schedule ? 'Notification scheduled successfully.' : 'Notification sent successfully.')
+    } catch (error) {
+      showToast(error.message || 'Unable to send notification.', 'error')
+    } finally {
+      setSaving(false)
     }
-
-    setNotifications(prev => [newNotif, ...prev])
-    setNotifForm({ title: '', message: '', schedule: '' })
-    showToast(
-      notifForm.schedule
-        ? 'Notification scheduled successfully.'
-        : `Notification ${deliveryStatus === 'delivered' ? 'sent successfully.' : 'failed to send. Please try again.'}`,
-      deliveryStatus === 'delivered' || notifForm.schedule ? 'success' : 'error'
-    )
   }
 
   const handleEditNotif = (notif) => {
     setEditingNotif(notif)
-    setNotifForm({ title: notif.title, message: notif.message, schedule: '' })
+    setNotifForm({ title: notif.title, message: notif.message, schedule: notif.scheduledFor ? String(notif.scheduledFor).slice(0, 16) : '' })
   }
 
-  const handleUpdateNotif = () => {
+  const handleUpdateNotif = async () => {
+    if (saving || !editingNotif) return
+
     if (!notifForm.title.trim() || !notifForm.message.trim()) {
       showToast('Please fill in title and message.', 'error')
       return
     }
 
-    setNotifications(prev => prev.map(item =>
-      item.id === editingNotif.id
-        ? { ...item, title: notifForm.title.trim(), message: notifForm.message.trim() }
-        : item
-    ))
+    setSaving(true)
 
-    handleDiscard()
-    showToast('Notification updated successfully.')
+    try {
+      const updatedNotif = await communicationsApi.updateNotification(editingNotif.id, notifForm)
+
+      setNotifications(prev => prev.map(item =>
+        item.id === editingNotif.id ? updatedNotif : item
+      ))
+
+      handleDiscard()
+      showToast('Notification updated successfully.')
+    } catch (error) {
+      showToast(error.message || 'Unable to update notification.', 'error')
+    } finally {
+      setSaving(false)
+    }
   }
 
-  const handleDeleteNotif = (id, status) => {
+  const handleDeleteNotif = async (id, status) => {
     const message = status === 'failed'
       ? 'This notification failed. Do you still want to delete it?'
       : 'Are you sure you want to delete this notification?'
 
     if (window.confirm(message)) {
-      setNotifications(prev => prev.filter(item => item.id !== id))
-      showToast(status === 'failed' ? 'Failed notification deleted.' : 'Notification deleted successfully.')
+      const deleteKey = `notification-${id}`
+      setDeletingKey(deleteKey)
+
+      try {
+        await communicationsApi.deleteNotification(id)
+        setNotifications(prev => prev.filter(item => item.id !== id))
+        showToast(status === 'failed' ? 'Failed notification deleted.' : 'Notification deleted successfully.')
+      } catch (error) {
+        showToast(error.message || 'Unable to delete notification.', 'error')
+      } finally {
+        setDeletingKey('')
+      }
     }
   }
 
@@ -324,6 +385,15 @@ export default function Communication() {
         badge="Supplier communication"
         icon={Megaphone}
       />
+
+      {loading && (
+        <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+          <span className="inline-flex items-center gap-2">
+            <RefreshCw size={15} className="animate-spin" />
+            Loading communication records...
+          </span>
+        </div>
+      )}
 
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
         <div className="flex flex-col gap-4 border-b border-slate-200 p-4 dark:border-slate-700 lg:flex-row lg:items-center lg:justify-between">
@@ -348,6 +418,14 @@ export default function Communication() {
           </div>
 
           <div className="grid grid-cols-2 gap-2 sm:flex">
+            <button
+              type="button"
+              onClick={refreshCommunications}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-500 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700"
+            >
+              <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+              Refresh
+            </button>
             {(tab === 'news' ? newsFilters : notificationFilters).map(filter => (
               <FilterButton
                 key={filter}
@@ -414,9 +492,10 @@ export default function Communication() {
                             <button
                               type="button"
                               onClick={() => handleDeleteNews(item.id, item.status)}
-                              className="rounded-lg border border-red-200 p-1.5 text-red-500 transition-colors hover:bg-red-50 dark:border-red-900/40 dark:hover:bg-red-900/20"
+                              disabled={deletingKey === `news-${item.id}`}
+                              className="rounded-lg border border-red-200 p-1.5 text-red-500 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-900/40 dark:hover:bg-red-900/20"
                             >
-                              <Trash2 size={13} />
+                              {deletingKey === `news-${item.id}` ? <RefreshCw size={13} className="animate-spin" /> : <Trash2 size={13} />}
                             </button>
                           </div>
                         </td>
@@ -465,9 +544,10 @@ export default function Communication() {
                             <button
                               type="button"
                               onClick={() => handleDeleteNotif(item.id, item.status)}
-                              className="rounded-lg border border-red-200 p-1.5 text-red-500 transition-colors hover:bg-red-50 dark:border-red-900/40 dark:hover:bg-red-900/20"
+                              disabled={deletingKey === `notification-${item.id}`}
+                              className="rounded-lg border border-red-200 p-1.5 text-red-500 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-900/40 dark:hover:bg-red-900/20"
                             >
-                              <Trash2 size={13} />
+                              {deletingKey === `notification-${item.id}` ? <RefreshCw size={13} className="animate-spin" /> : <Trash2 size={13} />}
                             </button>
                           </div>
                         </td>
@@ -552,11 +632,12 @@ export default function Communication() {
                     <button
                       type="button"
                       onClick={editingNews ? handleUpdateNews : handleCreateNews}
-                      className="flex-1 rounded-lg py-2.5 text-sm font-semibold transition-colors"
+                      disabled={saving}
+                      className="flex-1 rounded-lg py-2.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-70"
                       style={themedPrimary}
                     >
                       <span className="inline-flex items-center gap-2">
-                        <Check size={14} />
+                        {saving ? <RefreshCw size={14} className="animate-spin" /> : <Check size={14} />}
                         {editingNews ? 'Update' : 'Publish'}
                       </span>
                     </button>
@@ -627,11 +708,12 @@ export default function Communication() {
                     <button
                       type="button"
                       onClick={editingNotif ? handleUpdateNotif : handleSendNotification}
-                      className="flex-1 rounded-lg py-2.5 text-sm font-semibold transition-colors"
+                      disabled={saving}
+                      className="flex-1 rounded-lg py-2.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-70"
                       style={themedPrimary}
                     >
                       <span className="inline-flex items-center gap-2">
-                        <Send size={14} />
+                        {saving ? <RefreshCw size={14} className="animate-spin" /> : <Send size={14} />}
                         {editingNotif ? 'Update' : 'Send'}
                       </span>
                     </button>

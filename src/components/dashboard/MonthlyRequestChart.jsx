@@ -38,7 +38,7 @@ function ChartTooltip({ active, payload, label }) {
 
 export default function MonthlyRequestChart({ data }) {
   return (
-    <section className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-5 shadow-sm">
+    <section className="min-w-0 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-5 shadow-sm">
       <div className="flex items-start justify-between gap-4 mb-5">
         <div>
           <h2 className="text-base font-semibold text-slate-900 dark:text-white flex items-center gap-2">
@@ -61,8 +61,8 @@ export default function MonthlyRequestChart({ data }) {
         </div>
       </div>
 
-      <div className="h-72">
-        <ResponsiveContainer width="100%" height="100%">
+      <div className="h-72 min-h-72 min-w-0">
+        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={288} debounce={50}>
           <BarChart data={data} margin={{ top: 8, right: 8, left: -18, bottom: 0 }} barGap={7}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
             <XAxis dataKey="name" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />

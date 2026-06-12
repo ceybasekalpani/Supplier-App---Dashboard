@@ -1,54 +1,92 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { 
   Save, RotateCcw, Users, ShieldCheck, Key, LayoutDashboard, 
   Truck, FileText, Settings as SettingsIcon, MessageSquare, 
   UserCog, Sliders, Check, ChevronRight, ChevronDown,
-  CheckSquare, Square
+  CheckSquare, Square, RefreshCw
 } from 'lucide-react';
 import Avatar from '../components/ui/Avatar';
 import StatusBadge from '../components/ui/StatusBadge';
-import {
-  permissionCatalog as SUB_PERMISSIONS,
-  roleModulePermissionDefaults as INITIAL_MODULE_PERMISSIONS,
-  roleSubPermissionDefaults as INITIAL_SUB_PERMISSIONS,
-  systemUsers as USERS,
-} from '../data/mockData';
+import { dashboardPermissionsApi } from '../services/dashboardPermissionsApi';
 
-// Module definitions with icons and labels
-const MODULES = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, description: 'View analytics, cards, graphs, and quick actions' },
-  { id: 'suppliers', label: 'Suppliers', icon: Truck, description: 'Manage supplier information, search, and history' },
-  { id: 'requests', label: 'Requests', icon: FileText, description: 'Handle advance, fertilizer & item requests with approvals' },
-  { id: 'configurations', label: 'Configurations', icon: SettingsIcon, description: 'Manage fertilizer and item types' },
-  { id: 'communication', label: 'Communication', icon: MessageSquare, description: 'News and notifications management' },
-  { id: 'userManagement', label: 'User Management', icon: UserCog, description: 'Admin user and role management' },
-  { id: 'settings', label: 'Settings', icon: Sliders, description: 'System configuration and permissions' },
-];
+const moduleIconMap = {
+  dashboard: LayoutDashboard,
+  suppliers: Truck,
+  requests: FileText,
+  configurations: SettingsIcon,
+  communication: MessageSquare,
+  userManagement: UserCog,
+  settings: Sliders,
+}
 
-const createUserModulePermissions = () => USERS.reduce((acc, user) => {
-  acc[user.id] = { ...(INITIAL_MODULE_PERMISSIONS[user.role] || INITIAL_MODULE_PERMISSIONS.Viewer) };
-  return acc;
-}, {});
-
-const createUserSubPermissions = () => USERS.reduce((acc, user) => {
-  acc[user.id] = { ...(INITIAL_SUB_PERMISSIONS[user.role] || INITIAL_SUB_PERMISSIONS.Viewer) };
-  return acc;
-}, {});
+const emptyPermissions = { modulePermissions: {}, subPermissions: {} }
 
 const Settings = () => {
-  const [selectedUser, setSelectedUser] = useState(USERS[0]);
-  const [userModulePermissions, setUserModulePermissions] = useState(createUserModulePermissions);
-  const [userSubPermissions, setUserSubPermissions] = useState(createUserSubPermissions);
-  const [modulePermissions, setModulePermissions] = useState({ ...userModulePermissions[USERS[0].id] });
-  const [subPermissions, setSubPermissions] = useState({ ...userSubPermissions[USERS[0].id] });
+  const [users, setUsers] = useState([]);
+  const [modules, setModules] = useState([]);
+  const [userPermissions, setUserPermissions] = useState({});
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [modulePermissions, setModulePermissions] = useState({});
+  const [subPermissions, setSubPermissions] = useState({});
   const [expandedModules, setExpandedModules] = useState({});
   const [hasChanges, setHasChanges] = useState(false);
   const [showSaveSuccess, setShowSaveSuccess] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    dashboardPermissionsApi
+      .getSettings({ signal: controller.signal })
+      .then(result => {
+        setUsers(result.users);
+        setModules(result.modules);
+        setUserPermissions(result.userPermissions);
+
+        const firstUser = result.users[0] || null;
+        setSelectedUser(firstUser);
+
+        const firstPermissions = firstUser ? result.userPermissions[firstUser.id] || emptyPermissions : emptyPermissions;
+        setModulePermissions({ ...firstPermissions.modulePermissions });
+        setSubPermissions({ ...firstPermissions.subPermissions });
+        setExpandedModules({});
+        setHasChanges(false);
+        setError('');
+      })
+      .catch(error => {
+        if (error.name !== 'AbortError') {
+          setError(error.message || 'Unable to load dashboard permissions');
+        }
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+
+    return () => {
+      controller.abort();
+    };
+  }, [refreshKey]);
+
+  const subPermissionsByModule = useMemo(() => (
+    modules.reduce((acc, module) => {
+      acc[module.id] = module.subPermissions || [];
+      return acc;
+    }, {})
+  ), [modules]);
+
+  const applyUserPermissions = (user, permissionsMap = userPermissions) => {
+    const permissions = permissionsMap[user.id] || emptyPermissions;
+
+    setModulePermissions({ ...permissions.modulePermissions });
+    setSubPermissions({ ...permissions.subPermissions });
+  };
 
   const handleUserSelect = (user) => {
     setSelectedUser(user);
-    setModulePermissions({ ...(userModulePermissions[user.id] || INITIAL_MODULE_PERMISSIONS[user.role] || INITIAL_MODULE_PERMISSIONS.Viewer) });
-    setSubPermissions({ ...(userSubPermissions[user.id] || INITIAL_SUB_PERMISSIONS[user.role] || INITIAL_SUB_PERMISSIONS.Viewer) });
+    applyUserPermissions(user);
     setExpandedModules({});
     setHasChanges(false);
   };
@@ -62,7 +100,7 @@ const Settings = () => {
       setSubPermissions(prev => ({ ...prev, [moduleId]: [] }));
     } else {
       // If enabling module, enable default sub-permissions (view only for basic access)
-      const defaultSubs = SUB_PERMISSIONS[moduleId]
+      const defaultSubs = (subPermissionsByModule[moduleId] || [])
         .filter(sub => sub.id.startsWith('view_'))
         .map(sub => sub.id);
       setSubPermissions(prev => ({ ...prev, [moduleId]: defaultSubs }));
@@ -88,7 +126,7 @@ const Settings = () => {
   };
 
   const selectAllSubPermissions = (moduleId) => {
-    const allSubIds = SUB_PERMISSIONS[moduleId].map(sub => sub.id);
+    const allSubIds = (subPermissionsByModule[moduleId] || []).map(sub => sub.id);
     setSubPermissions(prev => ({ ...prev, [moduleId]: allSubIds }));
     if (!modulePermissions[moduleId]) {
       setModulePermissions(prevMod => ({ ...prevMod, [moduleId]: true }));
@@ -106,25 +144,41 @@ const Settings = () => {
   };
 
   const handleReset = () => {
-    setModulePermissions({ ...(INITIAL_MODULE_PERMISSIONS[selectedUser.role] || INITIAL_MODULE_PERMISSIONS.Viewer) });
-    setSubPermissions({ ...(INITIAL_SUB_PERMISSIONS[selectedUser.role] || INITIAL_SUB_PERMISSIONS.Viewer) });
+    if (!selectedUser) return;
+    applyUserPermissions(selectedUser);
     setHasChanges(false);
   };
 
-  const handleSave = () => {
-    setUserModulePermissions(prev => ({ ...prev, [selectedUser.id]: { ...modulePermissions } }));
-    setUserSubPermissions(prev => ({ ...prev, [selectedUser.id]: { ...subPermissions } }));
-    setHasChanges(false);
-    setShowSaveSuccess(true);
-    setTimeout(() => setShowSaveSuccess(false), 3000);
+  const handleSave = async () => {
+    if (!selectedUser || saving) return;
+
+    setSaving(true);
+
+    try {
+      const saved = await dashboardPermissionsApi.saveUserPermissions(selectedUser.id, {
+        modulePermissions,
+        subPermissions,
+      });
+
+      setUserPermissions(prev => ({ ...prev, [selectedUser.id]: saved }));
+      setModulePermissions({ ...saved.modulePermissions });
+      setSubPermissions({ ...saved.subPermissions });
+      setHasChanges(false);
+      setShowSaveSuccess(true);
+      setTimeout(() => setShowSaveSuccess(false), 3000);
+    } catch (error) {
+      setError(error.message || 'Unable to save permissions');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const enabledModulesCount = Object.values(modulePermissions).filter(Boolean).length;
-  const totalModules = MODULES.length;
+  const totalModules = modules.length;
 
   // Calculate total sub-permissions enabled
   const totalSubPermissionsEnabled = Object.values(subPermissions).reduce((acc, curr) => acc + curr.length, 0);
-  const totalSubPermissionsAvailable = Object.values(SUB_PERMISSIONS).reduce((acc, curr) => acc + curr.length, 0);
+  const totalSubPermissionsAvailable = modules.reduce((acc, module) => acc + (module.subPermissions?.length || 0), 0);
 
   return (
     <div className="p-6 bg-slate-50 dark:bg-slate-900 min-h-screen">
@@ -132,15 +186,41 @@ const Settings = () => {
         {/* Header */}
         <div className="flex justify-between items-center flex-wrap gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">User Permission Settings</h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Configure module access and granular action permissions for each created user</p>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Permission Management</h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Configure dashboard access and granular actions for each user.</p>
           </div>
+          <button
+            type="button"
+            onClick={() => {
+              setLoading(true);
+              setRefreshKey(current => current + 1);
+            }}
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+          >
+            <RefreshCw size="14" className={loading ? 'animate-spin' : ''} />
+            Refresh
+          </button>
         </div>
 
         {/* Success Toast */}
         {showSaveSuccess && (
           <div className="fixed bottom-6 right-6 bg-emerald-600 text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 animate-in slide-in-from-right-5 z-50">
             <Check size={16} /> Permissions updated successfully
+          </div>
+        )}
+
+        {error && (
+          <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700 dark:border-rose-900/50 dark:bg-rose-900/15 dark:text-rose-300">
+            {error}
+          </div>
+        )}
+
+        {loading && (
+          <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+            <span className="inline-flex items-center gap-2">
+              <RefreshCw size={15} className="animate-spin" />
+              Loading permission settings...
+            </span>
           </div>
         )}
 
@@ -156,25 +236,29 @@ const Settings = () => {
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Select a user to manage permissions</p>
               </div>
               <div className="p-2">
-                {USERS.map(user => (
+                {users.map(user => (
                   <button
                     key={user.id}
                     onClick={() => handleUserSelect(user)}
-                    className={`w-full text-left p-3 rounded-lg transition-all mb-1 ${selectedUser.id === user.id ? 'bg-emerald-50 dark:bg-emerald-900/20 border-l-4 border-emerald-500' : 'hover:bg-slate-50 dark:hover:bg-slate-700/40'}`}
+                    className={`w-full text-left p-3 rounded-lg transition-all mb-1 ${selectedUser?.id === user.id ? 'bg-emerald-50 dark:bg-emerald-900/20 border-l-4 border-emerald-500' : 'hover:bg-slate-50 dark:hover:bg-slate-700/40'}`}
                   >
                     <div className="flex items-center gap-3">
                       <Avatar name={user.name} />
                       <div className="min-w-0 flex-1">
                         <div className="flex justify-between items-center gap-2">
-                          <span className={`font-medium text-sm truncate ${selectedUser.id === user.id ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-700 dark:text-slate-300'}`}>{user.name}</span>
-                          {selectedUser.id === user.id && <Check size="14" className="text-emerald-500 flex-shrink-0" />}
+                          <span className={`font-medium text-sm truncate ${selectedUser?.id === user.id ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-700 dark:text-slate-300'}`}>{user.name}</span>
+                          {selectedUser?.id === user.id && <Check size="14" className="text-emerald-500 flex-shrink-0" />}
                         </div>
                         <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{user.email}</p>
-                        <p className="text-[11px] font-semibold text-slate-400">{user.role}</p>
                       </div>
                     </div>
                   </button>
                 ))}
+                {users.length === 0 && !loading && (
+                  <div className="px-3 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
+                    No dashboard users found
+                  </div>
+                )}
               </div>
             </div>
 
@@ -188,13 +272,12 @@ const Settings = () => {
               </div>
               <div className="p-3">
                 <div className="flex items-center gap-3 p-2 rounded-lg bg-slate-50 dark:bg-slate-700/30">
-                  <Avatar name={selectedUser.name} />
+                  <Avatar name={selectedUser?.name || ''} />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{selectedUser.name}</p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{selectedUser.email}</p>
-                    <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">{selectedUser.role}</p>
+                    <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{selectedUser?.name || 'No user selected'}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{selectedUser?.email || '-'}</p>
                   </div>
-                  <StatusBadge status={selectedUser.status} />
+                  {selectedUser && <StatusBadge status={selectedUser.status} />}
                 </div>
               </div>
             </div>
@@ -210,7 +293,7 @@ const Settings = () => {
                     <h3 className="font-semibold text-slate-900 dark:text-white">Granular Permissions</h3>
                   </div>
                   <p className="text-sm text-slate-600 dark:text-slate-300 mt-1">
-                    Configure access for <span className="font-medium text-emerald-600 dark:text-emerald-400">{selectedUser.name}</span>
+                    Configure access for <span className="font-medium text-emerald-600 dark:text-emerald-400">{selectedUser?.name || 'a selected user'}</span>
                   </p>
                 </div>
                 <div className="flex gap-6 text-right">
@@ -227,11 +310,11 @@ const Settings = () => {
             </div>
 
             <div className="divide-y divide-slate-100 dark:divide-slate-700/50">
-              {MODULES.map(module => {
+              {modules.map(module => {
                 const isModuleEnabled = modulePermissions[module.id];
-                const Icon = module.icon;
+                const Icon = moduleIconMap[module.id] || ShieldCheck;
                 const isExpanded = expandedModules[module.id];
-                const subPerms = SUB_PERMISSIONS[module.id] || [];
+                const subPerms = module.subPermissions || [];
                 const enabledSubs = subPermissions[module.id] || [];
                 const enabledCount = enabledSubs.length;
                 const totalCount = subPerms.length;
@@ -343,21 +426,23 @@ const Settings = () => {
             {/* Summary Footer with Reset and Save buttons */}
             <div className="p-5 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 flex justify-between items-center flex-wrap gap-3">
               <div className="text-xs text-slate-500 dark:text-slate-400">
-                <span className="font-medium">{selectedUser.name}</span> has access to {enabledModulesCount} modules with {totalSubPermissionsEnabled} granular actions
+                <span className="font-medium">{selectedUser?.name || 'Selected user'}</span> has access to {enabledModulesCount} modules with {totalSubPermissionsEnabled} granular actions
                 {hasChanges && <span className="ml-2 font-semibold text-amber-600 dark:text-amber-400">Unsaved changes</span>}
               </div>
               <div className="flex gap-2">
                 <button 
                   onClick={handleReset} 
-                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                  disabled={!selectedUser || saving}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <RotateCcw size="14" /> Reset
                 </button>
                 <button 
                   onClick={handleSave} 
-                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors shadow-sm"
+                  disabled={!selectedUser || saving || !hasChanges}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors shadow-sm disabled:cursor-not-allowed disabled:opacity-70"
                 >
-                  <Save size="14" /> Save Changes
+                  {saving ? <RefreshCw size="14" className="animate-spin" /> : <Save size="14" />} Save Changes
                 </button>
               </div>
             </div>

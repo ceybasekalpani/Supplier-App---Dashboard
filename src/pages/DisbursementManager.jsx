@@ -1,11 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { 
   Printer, Download, Package, CheckCircle2,
   Banknote, Sprout, Send, Truck, 
   ChevronDown, CheckCircle, AlertCircle,
-  Leaf
+  Leaf, RefreshCw
 } from 'lucide-react'
-import { approvedAdvances, approvedFertilizers, approvedItems, routeOptions } from '../data/mockData'
+import { disbursementApi } from '../services/disbursementApi'
 import { downloadPdf } from '../utils/pdf'
 
 const formatDisplayDate = (date) => {
@@ -97,12 +97,51 @@ export default function DisbursementManager() {
   const [paymentMethods, setPaymentMethods] = useState({})
   const [showSuccess, setShowSuccess] = useState(null)
   const [showError, setShowError] = useState(null)
+  const [queueLoading, setQueueLoading] = useState(true)
+  const [issuingKey, setIssuingKey] = useState('')
   const [isDownloading, setIsDownloading] = useState(false)
   
-  // State for each table's issued items
-  const [advancesState, setAdvancesState] = useState(approvedAdvances.map(a => ({ ...a, issued: false })))
-  const [fertilizersState, setFertilizersState] = useState(approvedFertilizers.map(f => ({ ...f, issued: false })))
-  const [itemsState, setItemsState] = useState(approvedItems.map(i => ({ ...i, issued: false })))
+  const [advancesState, setAdvancesState] = useState([])
+  const [fertilizersState, setFertilizersState] = useState([])
+  const [itemsState, setItemsState] = useState([])
+  const [routeNames, setRouteNames] = useState([])
+
+  useEffect(() => {
+    const controller = new AbortController()
+
+    disbursementApi
+      .getQueue({
+        route: selectedRoute,
+        fromDate: dateFrom,
+        toDate: dateTo,
+        signal: controller.signal,
+      })
+      .then(result => {
+        setAdvancesState(result.advance)
+        setFertilizersState(result.fertilizer)
+        setItemsState(result.items)
+        setRouteNames(previous => {
+          const routes = [...result.advance, ...result.fertilizer, ...result.items]
+            .map(item => item.route)
+            .filter(Boolean)
+
+          return Array.from(new Set([...previous, ...routes])).sort()
+        })
+      })
+      .catch(error => {
+        if (error.name !== 'AbortError') {
+          setShowError(error.message || 'Unable to load disbursement queue')
+          setTimeout(() => setShowError(null), 3000)
+        }
+      })
+      .finally(() => {
+        setQueueLoading(false)
+      })
+
+    return () => {
+      controller.abort()
+    }
+  }, [dateFrom, dateTo, selectedRoute])
 
   // Helper function to generate document content for an item
   const generateDocumentContent = (item, type, method = null) => {
@@ -180,24 +219,48 @@ Thank you for your partnership with Ceylon Tea Factory
   }
 
   // Handle disburse action
-  const handleDisburse = (type, item, method) => {
+  const handleDisburse = async (type, item, method) => {
     if (type === 'advance' && !method) {
       setShowError('Please select a payment method')
       setTimeout(() => setShowError(null), 3000)
       return
     }
-    
-    // Update the respective state to mark as issued
-    if (type === 'advance') {
-      setAdvancesState(prev => prev.map(i => i.id === item.id ? { ...i, issued: true } : i))
-    } else if (type === 'fertilizer') {
-      setFertilizersState(prev => prev.map(i => i.id === item.id ? { ...i, issued: true } : i))
-    } else if (type === 'items') {
-      setItemsState(prev => prev.map(i => i.id === item.id ? { ...i, issued: true } : i))
+
+    const requestKey = `${type}-${item.id}`
+    if (issuingKey) return
+
+    setIssuingKey(requestKey)
+    setShowError(null)
+
+    try {
+      const tracking = await disbursementApi.issue({
+        issuedType: type,
+        requestId: item.id,
+        method: method || 'Physical Delivery',
+      })
+
+      const markIssued = previous => previous.map(row => (
+        row.id === item.id
+          ? { ...row, issued: true, paymentMethod: tracking.method, trackingStatus: tracking.currentStatus }
+          : row
+      ))
+
+      if (type === 'advance') {
+        setAdvancesState(markIssued)
+      } else if (type === 'fertilizer') {
+        setFertilizersState(markIssued)
+      } else if (type === 'items') {
+        setItemsState(markIssued)
+      }
+
+      setShowSuccess(`${type.toUpperCase()} disbursed to ${item.supplierName}`)
+      setTimeout(() => setShowSuccess(null), 3000)
+    } catch (error) {
+      setShowError(error.message || 'Unable to issue disbursement')
+      setTimeout(() => setShowError(null), 3000)
+    } finally {
+      setIssuingKey('')
     }
-    
-    setShowSuccess(`${type.toUpperCase()} disbursed to ${item.supplierName}`)
-    setTimeout(() => setShowSuccess(null), 3000)
   }
 
   // Handle print document for single item
@@ -353,6 +416,11 @@ Thank you for your partnership with Ceylon Tea Factory
   const pendingFertilizersCount = filteredFertilizers.filter(i => !i.issued).length
   const pendingItemsCount = filteredItems.filter(i => !i.issued).length
 
+  const routeOptions = useMemo(() => ([
+    { id: 'all', name: 'All Routes' },
+    ...routeNames.map(route => ({ id: route, name: route })),
+  ]), [routeNames])
+
   return (
     <div className="space-y-6 p-6">
       {/* Success/Error Toasts */}
@@ -374,6 +442,15 @@ Thank you for your partnership with Ceylon Tea Factory
             <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-700"></div>
             <span className="text-slate-700 dark:text-slate-300">Downloading documents...</span>
           </div>
+        </div>
+      )}
+
+      {queueLoading && (
+        <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+          <span className="inline-flex items-center gap-2">
+            <RefreshCw size={15} className="animate-spin" />
+            Loading approved disbursement queue...
+          </span>
         </div>
       )}
 
@@ -461,7 +538,10 @@ Thank you for your partnership with Ceylon Tea Factory
           <div className="relative">
             <select
               value={selectedRoute}
-              onChange={(e) => setSelectedRoute(e.target.value)}
+              onChange={(e) => {
+                setQueueLoading(true)
+                setSelectedRoute(e.target.value)
+              }}
               className="appearance-none bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-4 py-2 pr-8 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-green-600 cursor-pointer"
             >
               {routeOptions.map(route => (
@@ -475,7 +555,10 @@ Thank you for your partnership with Ceylon Tea Factory
             <input
               type="date"
               value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
+              onChange={(e) => {
+                setQueueLoading(true)
+                setDateFrom(e.target.value)
+              }}
               className="bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-green-600"
             />
           </label>
@@ -484,7 +567,10 @@ Thank you for your partnership with Ceylon Tea Factory
             <input
               type="date"
               value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
+              onChange={(e) => {
+                setQueueLoading(true)
+                setDateTo(e.target.value)
+              }}
               className="bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-green-600"
             />
           </label>
@@ -492,6 +578,7 @@ Thank you for your partnership with Ceylon Tea Factory
             <button
               type="button"
               onClick={() => {
+                setQueueLoading(true)
                 setSelectedRoute('all')
                 setDateFrom('')
                 setDateTo('')
@@ -600,7 +687,7 @@ Thank you for your partnership with Ceylon Tea Factory
                       <td className="py-3 px-4">
                         {item.issued ? (
                           <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-green-100 text-green-700 text-xs font-medium">
-                            <CheckCircle2 size={12} /> Issued via {paymentMethods[item.id] || 'N/A'}
+                            <CheckCircle2 size={12} /> Issued via {item.paymentMethod || paymentMethods[item.id] || 'N/A'}
                           </span>
                         ) : (
                           <select
@@ -620,14 +707,15 @@ Thank you for your partnership with Ceylon Tea Factory
                           {!item.issued ? (
                             <button
                               onClick={() => handleDisburse('advance', item, paymentMethods[item.id])}
-                              disabled={!paymentMethods[item.id]}
+                              disabled={!paymentMethods[item.id] || issuingKey === `advance-${item.id}`}
                               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
                                 paymentMethods[item.id]
                                   ? 'bg-amber-600 text-white hover:bg-amber-700 shadow-sm'
                                   : 'bg-slate-200 text-slate-400 cursor-not-allowed dark:bg-slate-700'
                               }`}
                             >
-                              <Send size={12} /> Disburse
+                              {issuingKey === `advance-${item.id}` ? <RefreshCw size={12} className="animate-spin" /> : <Send size={12} />}
+                              Disburse
                             </button>
                           ) : (
                             <span className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-green-100 text-green-700">
@@ -723,10 +811,12 @@ Thank you for your partnership with Ceylon Tea Factory
                         <div className="flex gap-2">
                           {!item.issued ? (
                             <button
-                              onClick={() => handleDisburse('fertilizer', item, 'Physical')}
-                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-all shadow-sm"
+                              onClick={() => handleDisburse('fertilizer', item, 'Physical Delivery')}
+                              disabled={issuingKey === `fertilizer-${item.id}`}
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-all shadow-sm disabled:cursor-not-allowed disabled:opacity-70"
                             >
-                              <Send size={12} /> Disburse
+                              {issuingKey === `fertilizer-${item.id}` ? <RefreshCw size={12} className="animate-spin" /> : <Send size={12} />}
+                              Disburse
                             </button>
                           ) : (
                             <span className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-green-100 text-green-700">
@@ -822,10 +912,12 @@ Thank you for your partnership with Ceylon Tea Factory
                         <div className="flex gap-2">
                           {!item.issued ? (
                             <button
-                              onClick={() => handleDisburse('items', item, 'Physical')}
-                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-teal-600 text-white hover:bg-teal-700 transition-all shadow-sm"
+                              onClick={() => handleDisburse('items', item, 'Physical Delivery')}
+                              disabled={issuingKey === `items-${item.id}`}
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-teal-600 text-white hover:bg-teal-700 transition-all shadow-sm disabled:cursor-not-allowed disabled:opacity-70"
                             >
-                              <Send size={12} /> Disburse
+                              {issuingKey === `items-${item.id}` ? <RefreshCw size={12} className="animate-spin" /> : <Send size={12} />}
+                              Disburse
                             </button>
                           ) : (
                             <span className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-green-100 text-green-700">

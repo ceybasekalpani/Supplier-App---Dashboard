@@ -1,4 +1,4 @@
-import { Banknote, CheckCircle2, Clock, Package, Sprout, XCircle } from 'lucide-react'
+import { Banknote, CheckCircle2, Clock, Leaf, Package, Sprout, Users, XCircle } from 'lucide-react'
 
 const CARD_STYLES = {
   advance: {
@@ -21,6 +21,33 @@ const CARD_STYLES = {
   },
 }
 
+const KPI_STYLES = {
+  green: {
+    icon: Users,
+    accent: 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300',
+    ring: 'border-green-200 dark:border-green-900/40',
+    header: 'text-green-700 dark:text-green-300',
+  },
+  amber: {
+    icon: Clock,
+    accent: 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300',
+    ring: 'border-amber-200 dark:border-amber-900/40',
+    header: 'text-amber-700 dark:text-amber-300',
+  },
+  sky: {
+    icon: Leaf,
+    accent: 'bg-sky-50 text-sky-700 dark:bg-sky-900/20 dark:text-sky-300',
+    ring: 'border-sky-200 dark:border-sky-900/40',
+    header: 'text-sky-700 dark:text-sky-300',
+  },
+  slate: {
+    icon: CheckCircle2,
+    accent: 'bg-slate-100 text-slate-700 dark:bg-slate-900 dark:text-slate-300',
+    ring: 'border-slate-200 dark:border-slate-700',
+    header: 'text-slate-700 dark:text-slate-300',
+  },
+}
+
 const statusItems = [
   { key: 'approved', label: 'Approved', icon: CheckCircle2, className: 'text-green-700 dark:text-green-300' },
   { key: 'pending', label: 'Pending', icon: Clock, className: 'text-amber-700 dark:text-amber-300' },
@@ -28,6 +55,37 @@ const statusItems = [
 ]
 
 export default function DashboardStats({ stats }) {
+  const isBackendKpiShape = stats.some(item => item.value !== undefined)
+
+  if (isBackendKpiShape) {
+    return (
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {stats.map((item) => {
+          const style = KPI_STYLES[item.tone] || KPI_STYLES.slate
+          const Icon = style.icon
+
+          return (
+            <section
+              key={item.id || item.key || item.label}
+              className={`bg-white dark:bg-slate-800 border ${style.ring} rounded-xl p-4 shadow-sm`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className={`text-xs font-semibold uppercase tracking-wide ${style.header}`}>{item.label}</p>
+                  <p className="mt-2 break-words text-3xl font-bold text-slate-900 dark:text-white">{item.value}</p>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{item.description}</p>
+                </div>
+                <div className={`h-10 w-10 flex-shrink-0 rounded-lg flex items-center justify-center ${style.accent}`}>
+                  <Icon size={19} />
+                </div>
+              </div>
+            </section>
+          )
+        })}
+      </div>
+    )
+  }
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
       {stats.map((item) => {

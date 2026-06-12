@@ -1,7 +1,7 @@
-import { useState } from 'react'
-import { Check, Flower2, Package, Pencil, Plus, Save, X } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Check, Flower2, Info, Package, Pencil, Plus, RefreshCw, Save, X } from 'lucide-react'
 import PageHeader from '../components/ui/PageHeader'
-import { fertilizerTypes, itemTypes } from '../data/mockData'
+import { fertilizerItemConfigurationsApi } from '../services/fertilizerItemConfigurationsApi'
 
 const configMeta = {
   fertilizer: {
@@ -40,15 +40,43 @@ export default function Configurations() {
   const [name, setName] = useState('')
   const [editingId, setEditingId] = useState(null)
   const [error, setError] = useState('')
+  const [loadError, setLoadError] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [activeSavingId, setActiveSavingId] = useState(null)
   const [showSuccess, setShowSuccess] = useState(false)
   const [successMessage, setSuccessMessage] = useState('')
+  const [refreshKey, setRefreshKey] = useState(0)
 
-  const [fertilizerList, setFertilizerList] = useState(fertilizerTypes)
-  const [itemList, setItemList] = useState(itemTypes)
+  const [fertilizerList, setFertilizerList] = useState([])
+  const [itemList, setItemList] = useState([])
 
   const meta = configMeta[tab]
   const TypeIcon = meta.icon
   const items = tab === 'fertilizer' ? fertilizerList : itemList
+
+  useEffect(() => {
+    const controller = new AbortController()
+
+    fertilizerItemConfigurationsApi
+      .list({ includeInactive: true, signal: controller.signal })
+      .then(result => {
+        setFertilizerList(result.fertilizer)
+        setItemList(result.items)
+      })
+      .catch(error => {
+        if (error.name !== 'AbortError') {
+          setLoadError(error.message || 'Unable to load configurations')
+        }
+      })
+      .finally(() => {
+        setLoading(false)
+      })
+
+    return () => {
+      controller.abort()
+    }
+  }, [refreshKey])
 
   const resetForm = () => {
     setName('')
@@ -67,7 +95,24 @@ export default function Configurations() {
     setTimeout(() => setShowSuccess(false), 3000)
   }
 
-  const handleSave = () => {
+  const refreshConfigurations = () => {
+    setLoading(true)
+    setLoadError('')
+    setRefreshKey(current => current + 1)
+  }
+
+  const updateCurrentList = (updater) => {
+    if (tab === 'fertilizer') {
+      setFertilizerList(previous => updater(previous))
+      return
+    }
+
+    setItemList(previous => updater(previous))
+  }
+
+  const handleSave = async () => {
+    if (saving) return
+
     const cleanName = name.trim()
 
     if (!cleanName) {
@@ -81,33 +126,69 @@ export default function Configurations() {
       return
     }
 
-    if (editingId) {
-      const updateItem = { ...items.find(item => item.id === editingId), name: cleanName }
+    setSaving(true)
+    setError('')
 
-      if (tab === 'fertilizer') {
-        setFertilizerList(prev => prev.map(item => item.id === editingId ? updateItem : item))
+    try {
+      if (editingId) {
+        const currentItem = items.find(item => item.id === editingId)
+        const updatedItem = await fertilizerItemConfigurationsApi.update({
+          category: tab,
+          id: editingId,
+          name: cleanName,
+          isActive: currentItem?.isActive ?? true,
+        })
+
+        updateCurrentList(previous => previous.map(item => (
+          item.id === editingId ? updatedItem : item
+        )))
+
+        showToast(`${cleanName} updated successfully.`)
       } else {
-        setItemList(prev => prev.map(item => item.id === editingId ? updateItem : item))
+        const newItem = await fertilizerItemConfigurationsApi.create({
+          category: tab,
+          name: cleanName,
+        })
+
+        updateCurrentList(previous => [...previous, newItem])
+        showToast(`${cleanName} registered successfully.`)
       }
 
-      showToast(`${cleanName} updated successfully.`)
-    } else {
-      const newItem = {
-        id: Math.max(...items.map(item => item.id), 0) + 1,
-        name: cleanName,
-        status: 'active',
-      }
-
-      if (tab === 'fertilizer') {
-        setFertilizerList(prev => [...prev, newItem])
-      } else {
-        setItemList(prev => [...prev, newItem])
-      }
-
-      showToast(`${cleanName} registered successfully.`)
+      resetForm()
+    } catch (error) {
+      setError(error.message || 'Unable to save configuration.')
+    } finally {
+      setSaving(false)
     }
+  }
 
-    resetForm()
+  const handleActiveChange = async (item) => {
+    if (activeSavingId) return
+
+    setActiveSavingId(item.id)
+    setLoadError('')
+
+    try {
+      const updatedItem = await fertilizerItemConfigurationsApi.setActive({
+        category: tab,
+        id: item.id,
+        isActive: !item.isActive,
+      })
+
+      updateCurrentList(previous => previous.map(row => (
+        row.id === item.id ? updatedItem : row
+      )))
+
+      if (editingId === item.id) {
+        setEditingId(updatedItem.id)
+      }
+
+      showToast(`${updatedItem.name} ${updatedItem.isActive ? 'activated' : 'deactivated'} successfully.`)
+    } catch (error) {
+      setLoadError(error.message || 'Unable to update configuration status')
+    } finally {
+      setActiveSavingId(null)
+    }
   }
 
   const handleEdit = (item) => {
@@ -135,6 +216,27 @@ export default function Configurations() {
             <Check size={16} />
             <span className="text-sm font-medium">{successMessage}</span>
           </div>
+        </div>
+      )}
+
+      {loadError && (
+        <div className="flex items-start justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-900/15 dark:text-red-300">
+          <div className="flex items-start gap-2">
+            <Info size={16} className="mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="font-semibold">Configuration data could not be synchronized</p>
+              <p className="text-xs opacity-80">{loadError}</p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={refreshConfigurations}
+            className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-white px-2.5 py-1 text-xs font-semibold text-red-700 transition hover:bg-red-50 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-300"
+          >
+            <RefreshCw size={13} />
+            Retry
+          </button>
         </div>
       )}
 
@@ -183,7 +285,12 @@ export default function Configurations() {
               <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">{meta.plural}</h3>
             </div>
 
-            {items.length === 0 ? (
+            {loading ? (
+              <div className="flex flex-col items-center justify-center py-14 text-center text-slate-400">
+                <RefreshCw size={24} className="mb-2 animate-spin opacity-50" />
+                <p className="text-sm">Loading configurations from database...</p>
+              </div>
+            ) : items.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-14 text-center">
                 <div className="w-14 h-14 rounded-xl flex items-center justify-center mb-3" style={themedAccent.icon}>
                   <TypeIcon size={24} />
@@ -197,6 +304,7 @@ export default function Configurations() {
                   <thead>
                     <tr className="border-b border-slate-200 dark:border-slate-700">
                       <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wide py-3 px-4">Name</th>
+                      <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wide py-3 px-4">Status</th>
                       <th className="text-right text-xs font-semibold text-slate-400 uppercase tracking-wide py-3 px-4">Action</th>
                     </tr>
                   </thead>
@@ -218,15 +326,39 @@ export default function Configurations() {
                             </div>
                           </div>
                         </td>
+                        <td className="py-3 px-4">
+                          <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${
+                            item.isActive
+                              ? 'border border-green-200 bg-green-50 text-green-700 dark:border-green-900/50 dark:bg-green-900/15 dark:text-green-300'
+                              : 'border border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400'
+                          }`}>
+                            {item.status || (item.isActive ? 'active' : 'inactive')}
+                          </span>
+                        </td>
                         <td className="py-3 px-4 text-right">
-                          <button
-                            type="button"
-                            onClick={() => handleEdit(item)}
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
-                          >
-                            <Pencil size={13} />
-                            Edit
-                          </button>
+                          <div className="inline-flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleActiveChange(item)}
+                              disabled={activeSavingId === item.id}
+                              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                                item.isActive
+                                  ? 'border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700'
+                                  : 'border-green-200 text-green-700 hover:bg-green-50 dark:border-green-900/50 dark:text-green-300 dark:hover:bg-green-900/15'
+                              }`}
+                            >
+                              {activeSavingId === item.id ? <RefreshCw size={13} className="animate-spin" /> : <Check size={13} />}
+                              {item.isActive ? 'Deactivate' : 'Activate'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleEdit(item)}
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+                            >
+                              <Pencil size={13} />
+                              Edit
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -285,14 +417,15 @@ export default function Configurations() {
                   <button
                     type="button"
                     onClick={handleSave}
-                    className="flex-1 py-2.5 text-sm font-semibold rounded-lg shadow-sm transition-colors focus:ring-2"
+                    disabled={saving}
+                    className="flex-1 py-2.5 text-sm font-semibold rounded-lg shadow-sm transition-colors focus:ring-2 disabled:cursor-not-allowed disabled:opacity-70"
                     style={{
                       ...themedAccent.button,
                       '--tw-ring-color': 'color-mix(in srgb, var(--theme-primary) 20%, transparent)',
                     }}
                   >
                     <span className="inline-flex items-center gap-2">
-                      <Save size={14} />
+                      {saving ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
                       {editingId ? 'Update' : 'Save'}
                     </span>
                   </button>

@@ -10,7 +10,7 @@ const pageTitles = {
   '/configurations':  'Configurations',
   '/communication':   'Communication',
   '/user-management': 'User Management',
-  '/settings':        'Settings',
+  '/settings':        'Permission Management',
 }
 
 export default function AppLayout() {

@@ -1,14 +1,15 @@
 // UserManagement.jsx
-import { useState, useRef } from 'react';
-import { Pencil, Trash2, Camera, X, Search } from 'lucide-react';
-import { systemUsers, userRoles } from '../data/mockData';
+import { useEffect, useState, useRef } from 'react';
+import { Pencil, Trash2, Camera, X, Search, RefreshCw } from 'lucide-react';
 import Avatar from '../components/ui/Avatar';
 import FormInput from '../components/ui/FormInput';
 import StatusBadge from '../components/ui/StatusBadge';
 import { sanitizeText, validateUserForm } from '../utils/validation';
+import { dashboardUsersApi } from '../services/dashboardUsersApi';
 
 const UserManagement = () => {
-  const [users, setUsers] = useState(systemUsers);
+  const [users, setUsers] = useState([]);
+  const [summary, setSummary] = useState({ totalAdministrators: 0, activeUsers: 0, inactiveUsers: 0 });
   const [editingUser, setEditingUser] = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -18,18 +19,41 @@ const UserManagement = () => {
   });
   const [imagePreview, setImagePreview] = useState(null);
   const [errors, setErrors] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [toast, setToast] = useState(null);
   const fileInputRef = useRef(null);
 
-  const filteredUsers = users.filter(user => {
-    const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          user.username.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || user.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
 
-  const activeCount = users.filter(u => u.status === 'active').length;
-  const inactiveCount = users.filter(u => u.status === 'inactive').length;
+  useEffect(() => {
+    const controller = new AbortController();
+
+    dashboardUsersApi
+      .list({ search: searchTerm, status: statusFilter, signal: controller.signal })
+      .then(result => {
+        setUsers(result.users);
+        setSummary(result.summary);
+      })
+      .catch(error => {
+        if (error.name !== 'AbortError') {
+          showToast(error.message || 'Unable to load dashboard users', 'error');
+        }
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+
+    return () => {
+      controller.abort();
+    };
+  }, [searchTerm, statusFilter]);
+
+  const filteredUsers = users;
 
   const validateForm = () => {
     const newErrors = validateUserForm(formData, { editing: Boolean(editingUser) });
@@ -54,20 +78,51 @@ const UserManagement = () => {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (saving) return;
     if (!validateForm()) return;
-    if (editingUser) {
-      setUsers(users.map(u => u.id === editingUser.id ? {
-        ...editingUser, name: sanitizeText(formData.fullName), email: sanitizeText(formData.email), username: sanitizeText(formData.username),
-        phoneNo: sanitizeText(formData.phoneNo), role: formData.role, status: formData.status,
-        avatar: imagePreview || editingUser.avatar
-      } : u));
-      alert('User updated successfully!');
-    } else {
-      setUsers([...users, { id: Date.now(), name: sanitizeText(formData.fullName), email: sanitizeText(formData.email), username: sanitizeText(formData.username), password: formData.password, phoneNo: sanitizeText(formData.phoneNo), role: formData.role, status: formData.status, avatar: imagePreview || null, createdAt: new Date().toISOString() }]);
-      alert('User created successfully!');
+
+    setSaving(true);
+
+    const payload = {
+      ...formData,
+      fullName: sanitizeText(formData.fullName),
+      email: sanitizeText(formData.email),
+      username: sanitizeText(formData.username),
+      phoneNo: sanitizeText(formData.phoneNo),
+      avatar: imagePreview || editingUser?.avatar || null,
+    };
+
+    try {
+      if (editingUser) {
+        const updated = await dashboardUsersApi.update(editingUser.id, payload);
+        const previousStatus = editingUser.status;
+
+        setUsers(previous => previous.map(user => user.id === editingUser.id ? updated : user));
+        if (previousStatus !== updated.status) {
+          setSummary(previous => ({
+            ...previous,
+            activeUsers: previous.activeUsers + (updated.status === 'active' ? 1 : 0) - (previousStatus === 'active' ? 1 : 0),
+            inactiveUsers: previous.inactiveUsers + (updated.status === 'inactive' ? 1 : 0) - (previousStatus === 'inactive' ? 1 : 0),
+          }));
+        }
+        showToast('User updated successfully.');
+      } else {
+        const created = await dashboardUsersApi.create(payload);
+        setUsers(previous => [created, ...previous]);
+        setSummary(previous => ({
+          totalAdministrators: previous.totalAdministrators + 1,
+          activeUsers: previous.activeUsers + (created.status === 'active' ? 1 : 0),
+          inactiveUsers: previous.inactiveUsers + (created.status === 'inactive' ? 1 : 0),
+        }));
+        showToast('User created successfully.');
+      }
+      resetForm();
+    } catch (error) {
+      showToast(error.message || 'Unable to save dashboard user', 'error');
+    } finally {
+      setSaving(false);
     }
-    resetForm();
   };
 
   const handleEdit = (user) => {
@@ -76,37 +131,53 @@ const UserManagement = () => {
     setImagePreview(user.avatar || null); setErrors({});
   };
 
-  const handleDelete = () => {
-    setUsers(users.filter(u => u.id !== showDeleteConfirm));
-    setShowDeleteConfirm(null);
-    if (editingUser?.id === showDeleteConfirm) resetForm();
-    alert('User deleted successfully!');
-  };
+  const handleDelete = async () => {
+    if (!showDeleteConfirm || deleting) return;
 
-  const getRoleColor = (role) => ({
-    'Super Admin': 'text-amber-600 dark:text-amber-400',
-    'Admin': 'text-blue-600 dark:text-blue-400',
-    'Support': 'text-emerald-600 dark:text-emerald-400',
-    'Viewer': 'text-slate-600 dark:text-slate-400'
-  }[role] || 'text-slate-600');
+    setDeleting(true);
+
+    try {
+      await dashboardUsersApi.delete(showDeleteConfirm);
+      const deletedUser = users.find(user => user.id === showDeleteConfirm);
+      setUsers(previous => previous.filter(user => user.id !== showDeleteConfirm));
+      setSummary(previous => ({
+        totalAdministrators: Math.max(previous.totalAdministrators - 1, 0),
+        activeUsers: Math.max(previous.activeUsers - (deletedUser?.status === 'active' ? 1 : 0), 0),
+        inactiveUsers: Math.max(previous.inactiveUsers - (deletedUser?.status === 'inactive' ? 1 : 0), 0),
+      }));
+      setShowDeleteConfirm(null);
+      if (editingUser?.id === showDeleteConfirm) resetForm();
+      showToast('User deleted successfully.');
+    } catch (error) {
+      showToast(error.message || 'Unable to delete dashboard user', 'error');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   return (
     <div className="p-6 bg-slate-50 dark:bg-slate-900 min-h-screen">
+      {toast && (
+        <div className={`fixed bottom-6 right-6 z-50 rounded-lg px-4 py-3 text-sm font-semibold text-white shadow-lg ${toast.type === 'error' ? 'bg-rose-600' : 'bg-emerald-600'}`}>
+          {toast.message}
+        </div>
+      )}
+
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-2xl font-bold text-slate-900 dark:text-white">User Management</h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Manage system administrators and their access roles</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Create dashboard users. Access is assigned per user in Permission Management.</p>
           </div>
         </div>
 
         {/* Stats Cards */}
         <div className="grid grid-cols-3 gap-5">
           {[
-            { label: 'Total Administrators', value: users.length, color: 'from-slate-500 to-slate-600', textColor: 'text-slate-900 dark:text-white' },
-            { label: 'Active Users', value: activeCount, color: 'from-emerald-500 to-teal-600', textColor: 'text-emerald-600 dark:text-emerald-400' },
-            { label: 'Inactive Users', value: inactiveCount, color: 'from-rose-500 to-red-600', textColor: 'text-rose-600 dark:text-rose-400' },
+            { label: 'Total Administrators', value: summary.totalAdministrators, color: 'from-slate-500 to-slate-600', textColor: 'text-slate-900 dark:text-white' },
+            { label: 'Active Users', value: summary.activeUsers, color: 'from-emerald-500 to-teal-600', textColor: 'text-emerald-600 dark:text-emerald-400' },
+            { label: 'Inactive Users', value: summary.inactiveUsers, color: 'from-rose-500 to-red-600', textColor: 'text-rose-600 dark:text-rose-400' },
           ].map((stat, idx) => (
             <div key={idx} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-5">
               <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">{stat.label}</p>
@@ -122,10 +193,10 @@ const UserManagement = () => {
             <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex flex-wrap gap-3 justify-between items-center">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input type="text" placeholder="Search by name, email or username..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-9 pr-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-white w-64 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500" />
+                <input type="text" placeholder="Search by name, email or username..." value={searchTerm} onChange={(e) => { setLoading(true); setSearchTerm(e.target.value); }} className="pl-9 pr-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-white w-64 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500" />
               </div>
               <div className="flex gap-2">
-                <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
+                <select value={statusFilter} onChange={(e) => { setLoading(true); setStatusFilter(e.target.value); }} className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
                   <option value="all">All Status</option>
                   <option value="active">Active</option>
                   <option value="inactive">Inactive</option>
@@ -133,11 +204,16 @@ const UserManagement = () => {
               </div>
             </div>
             <div className="overflow-x-auto">
+              {loading && (
+                <div className="flex items-center gap-2 px-4 py-3 text-sm font-semibold text-slate-500">
+                  <RefreshCw size={15} className="animate-spin" />
+                  Loading dashboard users...
+                </div>
+              )}
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
                     <th className="text-left py-3 px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Administrator</th>
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Role</th>
                     <th className="text-left py-3 px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
                     <th className="text-right py-3 px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Actions</th>
                   </tr>
@@ -155,7 +231,6 @@ const UserManagement = () => {
                           </div>
                         </div>
                       </td>
-                      <td className="py-3 px-4"><span className={`text-xs font-bold ${getRoleColor(user.role)}`}>{user.role}</span></td>
                       <td className="py-3 px-4"><StatusBadge status={user.status} /></td>
                       <td className="py-3 px-4 text-right">
                         <div className="flex justify-end gap-2">
@@ -165,7 +240,7 @@ const UserManagement = () => {
                       </td>
                     </tr>
                   ))}
-                  {filteredUsers.length === 0 && <tr><td colSpan="4" className="py-12 text-center text-slate-500 dark:text-slate-400">No users found</td></tr>}
+                  {filteredUsers.length === 0 && <tr><td colSpan="3" className="py-12 text-center text-slate-500 dark:text-slate-400">No users found</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -211,13 +286,7 @@ const UserManagement = () => {
                   />
                 );
               })}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Role</label>
-                  <select value={formData.role} onChange={(e) => setFormData(prev => ({ ...prev, role: e.target.value }))} className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500/20">
-                    {userRoles.map(role => <option key={role.id} value={role.name}>{role.name}</option>)}
-                  </select>
-                </div>
+              <div>
                 <div>
                   <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Status</label>
                   <select value={formData.status} onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value }))} className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500/20">
@@ -231,7 +300,12 @@ const UserManagement = () => {
             {/* Buttons */}
             <div className="flex gap-3 pt-2">
               <button onClick={resetForm} className="flex-1 py-2 text-sm font-medium rounded-lg border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">{editingUser ? 'Cancel' : 'Discard'}</button>
-              <button onClick={handleSave} className="flex-1 py-2 text-sm font-medium rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors shadow-sm">{editingUser ? 'Update User' : 'Create User'}</button>
+              <button onClick={handleSave} disabled={saving} className="flex-1 py-2 text-sm font-medium rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors shadow-sm disabled:cursor-not-allowed disabled:opacity-70">
+                <span className="inline-flex items-center justify-center gap-2">
+                  {saving && <RefreshCw size={14} className="animate-spin" />}
+                  {editingUser ? 'Update User' : 'Create User'}
+                </span>
+              </button>
             </div>
           </div>
         </div>
@@ -244,7 +318,12 @@ const UserManagement = () => {
               <p className="text-slate-600 dark:text-slate-400 mt-2">Are you sure you want to delete this user? This action cannot be undone.</p>
               <div className="flex gap-3 mt-6">
                 <button onClick={() => setShowDeleteConfirm(null)} className="flex-1 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700">Cancel</button>
-                <button onClick={handleDelete} className="flex-1 py-2 bg-rose-600 text-white rounded-lg hover:bg-rose-700">Delete</button>
+                <button onClick={handleDelete} disabled={deleting} className="flex-1 py-2 bg-rose-600 text-white rounded-lg hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-70">
+                  <span className="inline-flex items-center justify-center gap-2">
+                    {deleting && <RefreshCw size={14} className="animate-spin" />}
+                    Delete
+                  </span>
+                </button>
               </div>
             </div>
           </div>

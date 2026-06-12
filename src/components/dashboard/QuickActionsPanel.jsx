@@ -20,6 +20,15 @@ const ACTION_STYLES = {
     border: 'border-emerald-200 dark:border-emerald-900/40',
     count: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
   },
+  item: {
+    icon: Package,
+    title: 'Item Requests',
+    description: 'Review pending item approvals',
+    color: 'text-sky-700 dark:text-sky-300',
+    iconBg: 'bg-sky-50 dark:bg-sky-900/20',
+    border: 'border-sky-200 dark:border-sky-900/40',
+    count: 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300',
+  },
   items: {
     icon: Package,
     title: 'Item Requests',
@@ -31,12 +40,30 @@ const ACTION_STYLES = {
   },
 }
 
-export default function QuickActionsPanel({ queue }) {
+const normalizeQueueKey = (value) => {
+  const key = String(value || '').trim().toLowerCase()
+
+  if (key === 'advance') return 'advance'
+  if (key === 'fertilizer') return 'fertilizer'
+  if (key === 'item' || key === 'items') return 'items'
+
+  return key
+}
+
+export default function QuickActionsPanel({ queue = [] }) {
   const navigate = useNavigate()
-  const totalPending = queue.reduce((total, item) => total + item.pending, 0)
+  const safeQueue = Array.isArray(queue) ? queue : []
+
+  const totalPending = safeQueue.reduce((total, item) => (
+    total + Number(item?.pending || 0)
+  ), 0)
 
   const openRequestQueue = (tab) => {
-    navigate(`/requests?tab=${tab}&filter=pending`)
+    const normalizedTab = normalizeQueueKey(tab)
+
+    if (!normalizedTab) return
+
+    navigate(`/requests?tab=${normalizedTab}&filter=pending`)
   }
 
   const openAllRequests = () => {
@@ -59,15 +86,19 @@ export default function QuickActionsPanel({ queue }) {
       </div>
 
       <div className="space-y-2.5">
-        {queue.map((item) => {
-          const style = ACTION_STYLES[item.id]
+        {safeQueue.map((item) => {
+          const key = normalizeQueueKey(item?.id || item?.key)
+          const style = ACTION_STYLES[key]
+
+          if (!style) return null
+
           const Icon = style.icon
 
           return (
             <button
-              key={item.id}
+              key={key}
               type="button"
-              onClick={() => openRequestQueue(item.id)}
+              onClick={() => openRequestQueue(key)}
               className={`w-full rounded-lg border bg-white p-3 text-left transition hover:border-slate-300 hover:bg-slate-50 dark:bg-slate-900/20 dark:hover:bg-slate-900/40 ${style.border}`}
             >
               <div className="flex items-center gap-3">
@@ -81,7 +112,7 @@ export default function QuickActionsPanel({ queue }) {
                 </span>
 
                 <span className={`rounded-full px-2 py-1 text-xs font-bold ${style.count}`}>
-                  {item.pending}
+                  {Number(item?.pending || 0)}
                 </span>
                 <ArrowRight size={15} className="text-slate-400" />
               </div>

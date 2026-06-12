@@ -1,24 +1,45 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
-  Search, Check, X, Eye, Inbox, Info, User, Landmark,
-  TreePine, Leaf, Pencil, WalletCards, Banknote,
-  Sprout, Package
+  Search,
+  Check,
+  X,
+  Eye,
+  Inbox,
+  Info,
+  User,
+  Landmark,
+  TreePine,
+  Leaf,
+  Pencil,
+  WalletCards,
+  Banknote,
+  Sprout,
+  Package,
+  RefreshCw,
 } from 'lucide-react'
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts'
 import {
-  suppliers,
-  advanceRequests,
-  fertilizerRequests,
-  itemRequests,
+  suppliers as mockSuppliers,
   leafDeliveries,
   leafRates,
 } from '../data/mockData'
+import { dashboardRequestsApi } from '../services/dashboardRequestsApi'
+import { supplierDashboardApi } from '../services/supplierDashboardApi'
 
 const STATUS_STYLES = {
-  pending: { pill: 'bg-amber-50 text-amber-700 border border-amber-200', dot: 'bg-amber-400' },
-  approved: { pill: 'bg-green-50 text-green-700 border border-green-200', dot: 'bg-green-500' },
-  rejected: { pill: 'bg-red-50 text-red-600 border border-red-200', dot: 'bg-red-400' },
+  pending: {
+    pill: 'bg-amber-50 text-amber-700 border border-amber-200',
+    dot: 'bg-amber-400',
+  },
+  approved: {
+    pill: 'bg-green-50 text-green-700 border border-green-200',
+    dot: 'bg-green-500',
+  },
+  rejected: {
+    pill: 'bg-red-50 text-red-600 border border-red-200',
+    dot: 'bg-red-400',
+  },
 }
 
 const STATUS_COLORS = {
@@ -35,11 +56,6 @@ const tabs = [
 
 const validTabs = tabs.map(tab => tab.id)
 const validFilters = ['all', 'pending', 'approved', 'rejected']
-
-function getInitialQueryValue(searchParams, key, allowedValues, fallback) {
-  const value = searchParams.get(key)
-  return allowedValues.includes(value) ? value : fallback
-}
 
 const tabActiveClass = {
   advance: 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 shadow-sm',
@@ -59,19 +75,40 @@ const selectedRowClass = {
   items: 'bg-sky-50 dark:bg-sky-900/10',
 }
 
+function normalizeTab(value) {
+  const tab = String(value || '').trim().toLowerCase()
+
+  if (tab === 'item') return 'items'
+  if (validTabs.includes(tab)) return tab
+
+  return 'advance'
+}
+
+function normalizeFilter(value) {
+  const filter = String(value || '').trim().toLowerCase()
+  return validFilters.includes(filter) ? filter : 'all'
+}
+
 function StatusBadge({ status }) {
-  const style = STATUS_STYLES[status] || STATUS_STYLES.pending
+  const normalized = String(status || 'pending').trim().toLowerCase()
+  const style = STATUS_STYLES[normalized] || STATUS_STYLES.pending
 
   return (
     <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${style.pill}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${style.dot}`} />
-      {status}
+      {normalized}
     </span>
   )
 }
 
 function initials(name = '') {
-  return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
+  return String(name || '')
+    .split(' ')
+    .filter(Boolean)
+    .map(word => word[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase()
 }
 
 function Avatar({ name, size = 'md' }) {
@@ -89,13 +126,14 @@ function currency(value) {
 }
 
 function isInDateRange(date, from, to) {
+  if (!date) return true
   if (from && date < from) return false
   if (to && date > to) return false
   return true
 }
 
 function parseDateParts(dateString) {
-  const [year, month, day] = dateString.split('-').map(Number)
+  const [year, month, day] = String(dateString || '').split('-').map(Number)
   return { year, month, day }
 }
 
@@ -105,6 +143,7 @@ function formatDateParts(year, month, day) {
 
 function addMonthsToYearMonth(year, month, monthsToAdd) {
   const zeroBased = month - 1 + monthsToAdd
+
   return {
     year: year + Math.floor(zeroBased / 12),
     month: ((zeroBased % 12) + 12) % 12 + 1,
@@ -117,48 +156,67 @@ function daysInMonth(year, month) {
 
 function monthEnd(dateString) {
   const { year, month } = parseDateParts(dateString)
+
+  if (!year || !month) return ''
+
   return formatDateParts(year, month, daysInMonth(year, month))
 }
 
 function nextMonthStart(dateString) {
   const { year, month } = parseDateParts(dateString)
+
+  if (!year || !month) return ''
+
   const nextMonth = addMonthsToYearMonth(year, month, 1)
   return formatDateParts(nextMonth.year, nextMonth.month, 1)
 }
 
 function nextMonthSameDay(dateString) {
   const { year, month, day } = parseDateParts(dateString)
+
+  if (!year || !month || !day) return ''
+
   const nextMonth = addMonthsToYearMonth(year, month, 1)
   const safeDay = Math.min(day, daysInMonth(nextMonth.year, nextMonth.month))
+
   return formatDateParts(nextMonth.year, nextMonth.month, safeDay)
 }
 
 function monthKey(date) {
-  return date.slice(0, 7)
+  return String(date || '').slice(0, 7)
 }
 
 function rateFor(date) {
-  return leafRates.find(r => r.month === monthKey(date)) || { superRate: 0, normalRate: 0 }
+  return leafRates.find(rate => rate.month === monthKey(date)) || {
+    superRate: 0,
+    normalRate: 0,
+  }
 }
 
 function summarizeRows(rows) {
   return rows.reduce((acc, row) => ({
-    superNet: acc.superNet + row.superNet,
-    normalNet: acc.normalNet + row.normalNet,
-    total: acc.total + row.total,
-  }), { superNet: 0, normalNet: 0, total: 0 })
+    superNet: acc.superNet + Number(row.superNet || 0),
+    normalNet: acc.normalNet + Number(row.normalNet || 0),
+    total: acc.total + Number(row.total || 0),
+  }), {
+    superNet: 0,
+    normalNet: 0,
+    total: 0,
+  })
 }
 
 function buildAdvanceRows(regNo, from, to) {
   return leafDeliveries
-    .filter(r => r.regNo === regNo && isInDateRange(r.date, from, to))
-    .map(r => {
-      const rate = rateFor(r.date)
+    .filter(row => row.regNo === regNo && isInDateRange(row.date, from, to))
+    .map(row => {
+      const rate = rateFor(row.date)
+
       return {
-        ...r,
+        ...row,
         superRate: rate.superRate,
         normalRate: rate.normalRate,
-        total: (rate.superRate * r.superNet) + (rate.normalRate * r.normalNet),
+        total: (Number(rate.superRate || 0) * Number(row.superNet || 0)) +
+          (Number(rate.normalRate || 0) * Number(row.normalNet || 0)),
       }
     })
 }
@@ -168,9 +226,11 @@ function calculateAdvanceLimit(regNo, salaryFrom) {
   const nextMonthFrom = nextMonthStart(salaryFrom)
   const calculationTo = nextMonthSameDay(salaryFrom)
   const cycleEnd = calculationTo
+
   const selectedRows = buildAdvanceRows(regNo, salaryFrom, selectedMonthTo)
   const nextRows = buildAdvanceRows(regNo, nextMonthFrom, calculationTo)
   const rows = [...selectedRows, ...nextRows]
+
   const selected = summarizeRows(selectedRows)
   const next = summarizeRows(nextRows)
 
@@ -183,24 +243,45 @@ function calculateAdvanceLimit(regNo, salaryFrom) {
     calculationTo,
     cycleEnd,
     periods: [
-      { key: 'selected', label: 'Selected month', from: salaryFrom, to: selectedMonthTo, rows: selectedRows, ...selected },
-      { key: 'next', label: 'Next month', from: nextMonthFrom, to: calculationTo, rows: nextRows, ...next },
+      {
+        key: 'selected',
+        label: 'Selected month',
+        from: salaryFrom,
+        to: selectedMonthTo,
+        rows: selectedRows,
+        ...selected,
+      },
+      {
+        key: 'next',
+        label: 'Next month',
+        from: nextMonthFrom,
+        to: calculationTo,
+        rows: nextRows,
+        ...next,
+      },
     ],
   }
 }
 
-function requestLabel(req, tab) {
-  if (tab === 'advance') return currency(req.amount)
-  return `${req.type} - ${req.qty} ${req.unit}`
+function requestLabel(request, tab) {
+  if (tab === 'advance') return currency(request.amount)
+  return `${request.type || 'Request'} - ${Number(request.qty || 0).toLocaleString()} ${request.unit || ''}`
 }
 
 function summarizeQuantityByType(rows) {
   const totals = rows.reduce((acc, row) => {
     const key = `${row.type || 'Item'}__${row.unit || 'units'}`
+
     if (!acc[key]) {
-      acc[key] = { type: row.type || 'Item', unit: row.unit || 'units', qty: 0 }
+      acc[key] = {
+        type: row.type || 'Item',
+        unit: row.unit || 'units',
+        qty: 0,
+      }
     }
+
     acc[key].qty += Number(row.qty || 0)
+
     return acc
   }, {})
 
@@ -211,16 +292,21 @@ function RequestTableSummary({ rows, tab }) {
   const supplierCount = new Set(rows.map(row => row.regNo)).size
   const requestCount = rows.length
   const isAdvance = tab === 'advance'
+
   const totalAmount = isAdvance
     ? currency(rows.reduce((sum, row) => sum + Number(row.amount || 0), 0))
     : null
+
   const quantityBreakdown = isAdvance ? [] : summarizeQuantityByType(rows)
+
   const valueLabel = isAdvance
     ? 'Total advance amount'
     : tab === 'fertilizer'
       ? 'Fertilizer-wise quantity'
       : 'Item-wise quantity'
+
   const Icon = isAdvance ? Banknote : tab === 'fertilizer' ? Sprout : Package
+
   const tone = isAdvance
     ? 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/50 dark:bg-amber-900/15 dark:text-amber-200'
     : tab === 'fertilizer'
@@ -234,21 +320,27 @@ function RequestTableSummary({ rows, tab }) {
           <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Supplier count</p>
           <p className="mt-1 text-xl font-bold text-slate-900 dark:text-white">{supplierCount}</p>
         </div>
+
         <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/50">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Request count</p>
           <p className="mt-1 text-xl font-bold text-slate-900 dark:text-white">{requestCount}</p>
         </div>
+
         <div className={`rounded-lg border px-3 py-3 ${tone}`}>
           <div className="flex items-center gap-2">
             <Icon size={15} />
             <p className="text-[10px] font-semibold uppercase tracking-wide opacity-75">{valueLabel}</p>
           </div>
+
           {isAdvance ? (
             <p className="mt-1 text-xl font-bold">{totalAmount}</p>
           ) : (
             <div className="mt-2 flex flex-wrap gap-1.5">
               {quantityBreakdown.length > 0 ? quantityBreakdown.map(item => (
-                <span key={`${item.type}-${item.unit}`} className="rounded-md bg-white/70 px-2 py-1 text-xs font-bold ring-1 ring-black/5 dark:bg-slate-950/30">
+                <span
+                  key={`${item.type}-${item.unit}`}
+                  className="rounded-md bg-white/70 px-2 py-1 text-xs font-bold ring-1 ring-black/5 dark:bg-slate-950/30"
+                >
                   {item.type}: {item.qty.toLocaleString()} {item.unit}
                 </span>
               )) : (
@@ -263,41 +355,84 @@ function RequestTableSummary({ rows, tab }) {
 }
 
 function SupplierWindow({ regNo, tab, requestsByType, onClose }) {
-  const supplier = suppliers.find(s => s.regNo === regNo)
+  const fallbackSupplier = mockSuppliers.find(supplier => supplier.regNo === regNo)
+  const [supplier, setSupplier] = useState(fallbackSupplier || null)
+  const [supplierLoading, setSupplierLoading] = useState(false)
   const [salaryFrom, setSalaryFrom] = useState('2026-05-10')
   const [summaryStatus, setSummaryStatus] = useState('all')
+
+  useEffect(() => {
+    let mounted = true
+
+    setSupplier(fallbackSupplier || null)
+    setSupplierLoading(true)
+
+    supplierDashboardApi
+      .getSupplier({ regNo, months: 2 })
+      .then(result => {
+        if (mounted && result) {
+          setSupplier({
+            ...result,
+            land: result.land || fallbackSupplier?.land,
+          })
+        }
+      })
+      .catch(() => {
+        if (mounted) setSupplier(fallbackSupplier || null)
+      })
+      .finally(() => {
+        if (mounted) setSupplierLoading(false)
+      })
+
+    return () => {
+      mounted = false
+    }
+  }, [fallbackSupplier, regNo])
+
+  if (!supplier && supplierLoading) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+        <div className="rounded-lg bg-white px-5 py-4 text-sm font-semibold text-slate-600 shadow-xl dark:bg-slate-900 dark:text-slate-200">
+          Loading supplier details...
+        </div>
+      </div>
+    )
+  }
 
   if (!supplier) return null
 
   const limit = calculateAdvanceLimit(regNo, salaryFrom)
   const isAdvanceView = tab === 'advance'
   const leafNetWeight = limit.superNet + limit.normalNet
+
   const allSupplierRequests = [
-    ...requestsByType.advance.map(r => ({ ...r, category: 'Advance' })),
-    ...requestsByType.fertilizer.map(r => ({ ...r, category: 'Fertilizer' })),
-    ...requestsByType.items.map(r => ({ ...r, category: 'Item' })),
-  ].filter(r => r.regNo === regNo)
+    ...(requestsByType?.advance || []).map(request => ({ ...request, category: 'Advance' })),
+    ...(requestsByType?.fertilizer || []).map(request => ({ ...request, category: 'Fertilizer' })),
+    ...(requestsByType?.items || []).map(request => ({ ...request, category: 'Item' })),
+  ].filter(request => request.regNo === regNo)
 
   const summarySource = summaryStatus === 'all'
     ? allSupplierRequests
-    : allSupplierRequests.filter(r => r.status === summaryStatus)
+    : allSupplierRequests.filter(request => request.status === summaryStatus)
 
-  const summary = ['approved', 'pending', 'rejected'].map(status => ({
-    name: status,
-    value: summarySource.filter(r => r.status === status).length,
-  })).filter(item => item.value > 0)
+  const summary = ['approved', 'pending', 'rejected']
+    .map(status => ({
+      name: status,
+      value: summarySource.filter(request => request.status === status).length,
+    }))
+    .filter(item => item.value > 0)
+
   const requestCounts = {
-    advance: requestsByType.advance.filter(req => req.regNo === regNo).length,
-    fertilizer: requestsByType.fertilizer.filter(req => req.regNo === regNo).length,
-    items: requestsByType.items.filter(req => req.regNo === regNo).length,
+    advance: (requestsByType?.advance || []).filter(request => request.regNo === regNo).length,
+    fertilizer: (requestsByType?.fertilizer || []).filter(request => request.regNo === regNo).length,
+    items: (requestsByType?.items || []).filter(request => request.regNo === regNo).length,
   }
 
-  const showBank = tab === 'advance' && requestsByType.advance.some(req =>
-    req.regNo === regNo && ['Bank Transfer', 'Cheque'].includes(req.paymentType)
-  )
+  const showBank = tab === 'advance' && /(bank|cheque|check)/i.test(supplier.payment || '')
 
   const activeRequestLabel = tab === 'advance' ? 'Advance' : tab === 'fertilizer' ? 'Fertilizer' : 'Item'
   const ActiveIcon = tab === 'advance' ? WalletCards : tab === 'fertilizer' ? Sprout : Package
+
   const supplierRows = [
     ['Registration No.', supplier.regNo],
     ['Route', supplier.route],
@@ -306,41 +441,48 @@ function SupplierWindow({ regNo, tab, requestsByType, onClose }) {
     ['Payment', supplier.payment],
     ['Status', supplier.status],
   ]
+
   const landRows = [
     ['Acres', supplier.land?.acres ?? 0],
     ['Rood', supplier.land?.rood ?? 0],
     ['Perch', supplier.land?.perch ?? 0],
     ['Total Land', `${supplier.land?.acres ?? 0}A ${supplier.land?.rood ?? 0}R ${supplier.land?.perch ?? 0}P`],
   ]
+
   const bankRows = [
     ['Bank', supplier.bank],
     ['Branch', supplier.branch],
     ['Account No.', supplier.accountNo],
   ]
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
-      onClick={e => e.target === e.currentTarget && onClose()}
+      onClick={event => event.target === event.currentTarget && onClose()}
     >
       <div className="w-full max-w-7xl overflow-hidden rounded-lg bg-white shadow-[0_24px_90px_rgba(15,23,42,0.35)] ring-1 ring-slate-200 dark:bg-slate-950 dark:ring-slate-800">
         <header className="relative border-b border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
           <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-500 via-amber-400 to-sky-500" />
+
           <div className="flex items-center justify-between gap-4 px-6 py-5">
             <div className="flex min-w-0 items-center gap-4">
               <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-slate-950 text-base font-bold text-white shadow-lg dark:bg-white dark:text-slate-950">
                 {initials(supplier.name)}
               </div>
+
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <h3 className="truncate text-xl font-bold text-slate-950 dark:text-white">{supplier.name}</h3>
+
                   <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700 ring-1 ring-emerald-100 dark:bg-emerald-900/25 dark:text-emerald-300 dark:ring-emerald-900/50">
-                    {supplier.status}
+                    {supplier.status || 'active'}
                   </span>
                 </div>
+
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                   <span className="rounded-md bg-slate-100 px-2 py-1 font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">{supplier.regNo}</span>
-                  <span className="rounded-md bg-slate-100 px-2 py-1 text-slate-600 dark:bg-slate-800 dark:text-slate-300">{supplier.route}</span>
-                  <span className="rounded-md bg-slate-100 px-2 py-1 text-slate-600 dark:bg-slate-800 dark:text-slate-300">{supplier.payment}</span>
+                  <span className="rounded-md bg-slate-100 px-2 py-1 text-slate-600 dark:bg-slate-800 dark:text-slate-300">{supplier.route || '-'}</span>
+                  <span className="rounded-md bg-slate-100 px-2 py-1 text-slate-600 dark:bg-slate-800 dark:text-slate-300">{supplier.payment || '-'}</span>
                 </div>
               </div>
             </div>
@@ -351,11 +493,16 @@ function SupplierWindow({ regNo, tab, requestsByType, onClose }) {
                 <input
                   type="date"
                   value={salaryFrom}
-                  onChange={e => setSalaryFrom(e.target.value)}
+                  onChange={event => setSalaryFrom(event.target.value)}
                   className="bg-transparent text-xs font-bold text-slate-800 outline-none dark:text-white"
                 />
               </label>
-              <button onClick={onClose} className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-white">
+
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-white"
+              >
                 <X size={18} />
               </button>
             </div>
@@ -370,11 +517,15 @@ function SupplierWindow({ regNo, tab, requestsByType, onClose }) {
                   <User size={15} className="text-emerald-600" />
                   Supplier profile
                 </div>
+
                 <div className="space-y-2">
                   {supplierRows.map(([label, value]) => (
-                    <div key={label} className="flex items-start justify-between gap-4 border-b border-slate-100 pb-2 last:border-b-0 last:pb-0 dark:border-slate-800">
+                    <div
+                      key={label}
+                      className="flex items-start justify-between gap-4 border-b border-slate-100 pb-2 last:border-b-0 last:pb-0 dark:border-slate-800"
+                    >
                       <span className="text-xs text-slate-400">{label}</span>
-                      <span className="max-w-[58%] text-right text-xs font-semibold text-slate-800 dark:text-slate-100">{value}</span>
+                      <span className="max-w-[58%] text-right text-xs font-semibold text-slate-800 dark:text-slate-100">{value || '-'}</span>
                     </div>
                   ))}
                 </div>
@@ -385,9 +536,13 @@ function SupplierWindow({ regNo, tab, requestsByType, onClose }) {
                   <TreePine size={15} className="text-amber-600" />
                   Land profile
                 </div>
+
                 <div className="grid grid-cols-2 gap-2">
                   {landRows.map(([label, value]) => (
-                    <div key={label} className="rounded-md bg-amber-50 px-2.5 py-1.5 ring-1 ring-amber-100 dark:bg-amber-900/15 dark:ring-amber-900/40">
+                    <div
+                      key={label}
+                      className="rounded-md bg-amber-50 px-2.5 py-1.5 ring-1 ring-amber-100 dark:bg-amber-900/15 dark:ring-amber-900/40"
+                    >
                       <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</p>
                       <p className="text-sm font-bold text-slate-950 dark:text-white">{value}</p>
                     </div>
@@ -401,11 +556,15 @@ function SupplierWindow({ regNo, tab, requestsByType, onClose }) {
                     <Landmark size={15} className="text-sky-600" />
                     Bank profile
                   </div>
+
                   <div className="space-y-2">
                     {bankRows.map(([label, value]) => (
-                      <div key={label} className="flex items-center justify-between gap-3 border-b border-slate-100 pb-2 last:border-b-0 last:pb-0 dark:border-slate-800">
+                      <div
+                        key={label}
+                        className="flex items-center justify-between gap-3 border-b border-slate-100 pb-2 last:border-b-0 last:pb-0 dark:border-slate-800"
+                      >
                         <span className="text-xs text-slate-400">{label}</span>
-                        <span className="text-xs font-semibold text-slate-800 dark:text-slate-100">{value}</span>
+                        <span className="text-xs font-semibold text-slate-800 dark:text-slate-100">{value || '-'}</span>
                       </div>
                     ))}
                   </div>
@@ -420,17 +579,18 @@ function SupplierWindow({ regNo, tab, requestsByType, onClose }) {
                     {isAdvanceView ? <WalletCards size={15} /> : <ActiveIcon size={15} />}
                     {isAdvanceView ? 'Advance eligibility' : `${activeRequestLabel} eligibility`}
                   </div>
+
                   {isAdvanceView ? (
                     <>
                       <p className="mt-2 text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Maximum advance limit</p>
                       <p className="mt-0.5 text-xl font-bold text-emerald-800 dark:text-emerald-200">{currency(limit.total)}</p>
-                      <p className="mt-1 text-xs font-semibold text-slate-600 dark:text-slate-300">{salaryFrom} to {limit.cycleEnd}</p>
+                      <p className="mt-1 text-xs font-semibold text-slate-600 dark:text-slate-300">{salaryFrom} to {limit.cycleEnd || '-'}</p>
                     </>
                   ) : (
                     <>
                       <p className="mt-2 text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Leaf net weight</p>
                       <p className="mt-0.5 text-xl font-bold text-emerald-800 dark:text-emerald-200">{leafNetWeight.toLocaleString()} kg</p>
-                      <p className="mt-1 text-xs font-semibold text-slate-600 dark:text-slate-300">{salaryFrom} to {limit.cycleEnd}</p>
+                      <p className="mt-1 text-xs font-semibold text-slate-600 dark:text-slate-300">{salaryFrom} to {limit.cycleEnd || '-'}</p>
                     </>
                   )}
                 </div>
@@ -440,85 +600,95 @@ function SupplierWindow({ regNo, tab, requestsByType, onClose }) {
                   <input
                     type="date"
                     value={salaryFrom}
-                    onChange={e => setSalaryFrom(e.target.value)}
+                    onChange={event => setSalaryFrom(event.target.value)}
                     className="bg-transparent text-xs font-bold text-slate-800 outline-none dark:text-white"
                   />
                 </label>
               </section>
 
-            <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <div className="mb-3 flex items-center justify-between gap-3 flex-wrap">
-                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  <Leaf size={15} className="text-green-700 dark:text-green-300" />
-                  Supplier request summary
-                </div>
-                <div className="flex gap-1">
-                  {['all', 'approved', 'pending', 'rejected'].map(status => (
-                    <button
-                      key={status}
-                      onClick={() => setSummaryStatus(status)}
-                      className={`rounded-md border px-2.5 py-1 text-[11px] font-semibold capitalize transition-colors ${
-                        summaryStatus === status
-                          ? 'border-green-700 bg-green-700 text-white'
-                          : 'border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800'
-                      }`}
-                    >
-                      {status}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <div className="mb-3 flex items-center justify-between gap-3 flex-wrap">
+                  <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    <Leaf size={15} className="text-green-700 dark:text-green-300" />
+                    Supplier request summary
+                  </div>
 
-              <div className="grid grid-cols-1 gap-3 lg:grid-cols-[170px_1fr]">
-                <div className="h-36 rounded-lg border border-slate-100 bg-slate-50 p-2 dark:border-slate-800 dark:bg-slate-800/60">
-                  {summary.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie data={summary} dataKey="value" nameKey="name" innerRadius={32} outerRadius={56} paddingAngle={3}>
-                          {summary.map(item => (
-                            <Cell key={item.name} fill={STATUS_COLORS[item.name]} />
-                          ))}
-                        </Pie>
-                        <Tooltip />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <div className="flex h-full items-center justify-center text-xs text-slate-400">No requests</div>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <div className="grid grid-cols-3 gap-2">
-                    {[
-                      ['Advance', requestCounts.advance, 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300'],
-                      ['Fertilizer', requestCounts.fertilizer, 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300'],
-                      ['Items', requestCounts.items, 'bg-sky-50 text-sky-700 dark:bg-sky-900/20 dark:text-sky-300'],
-                    ].map(([label, value, tone]) => (
-                      <div key={label} className={`rounded-md px-2 py-1.5 text-center ${tone}`}>
-                        <p className="text-base font-bold">{value}</p>
-                        <p className="text-[10px] font-semibold uppercase tracking-wide">{label}</p>
-                      </div>
+                  <div className="flex gap-1">
+                    {['all', 'approved', 'pending', 'rejected'].map(status => (
+                      <button
+                        key={status}
+                        type="button"
+                        onClick={() => setSummaryStatus(status)}
+                        className={`rounded-md border px-2.5 py-1 text-[11px] font-semibold capitalize transition-colors ${
+                          summaryStatus === status
+                            ? 'border-green-700 bg-green-700 text-white'
+                            : 'border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800'
+                        }`}
+                      >
+                        {status}
+                      </button>
                     ))}
                   </div>
-                  <div className="max-h-32 space-y-1.5 overflow-y-auto pr-1">
-                    {summarySource.map(req => (
-                      <div key={`${req.category}-${req.id}`} className="flex items-center justify-between gap-3 rounded-md border border-slate-100 bg-slate-50 px-2.5 py-1.5 dark:border-slate-800 dark:bg-slate-800/70">
-                        <div className="min-w-0">
-                          <p className="truncate text-xs font-semibold text-slate-800 dark:text-slate-100">{req.category} / {requestLabel(req, req.category === 'Advance' ? 'advance' : 'items')}</p>
-                          <p className="text-[11px] text-slate-400">{req.date}</p>
-                        </div>
-                        <StatusBadge status={req.status} />
-                      </div>
-                    ))}
-                    {summarySource.length === 0 && (
-                      <div className="py-8 text-center text-sm text-slate-400">No matching requests</div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 lg:grid-cols-[170px_1fr]">
+                  <div className="h-36 rounded-lg border border-slate-100 bg-slate-50 p-2 dark:border-slate-800 dark:bg-slate-800/60">
+                    {summary.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie data={summary} dataKey="value" nameKey="name" innerRadius={32} outerRadius={56} paddingAngle={3}>
+                            {summary.map(item => (
+                              <Cell key={item.name} fill={STATUS_COLORS[item.name]} />
+                            ))}
+                          </Pie>
+                          <Tooltip />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-xs text-slate-400">No requests</div>
                     )}
                   </div>
+
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        ['Advance', requestCounts.advance, 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300'],
+                        ['Fertilizer', requestCounts.fertilizer, 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300'],
+                        ['Items', requestCounts.items, 'bg-sky-50 text-sky-700 dark:bg-sky-900/20 dark:text-sky-300'],
+                      ].map(([label, value, tone]) => (
+                        <div key={label} className={`rounded-md px-2 py-1.5 text-center ${tone}`}>
+                          <p className="text-base font-bold">{value}</p>
+                          <p className="text-[10px] font-semibold uppercase tracking-wide">{label}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="max-h-32 space-y-1.5 overflow-y-auto pr-1">
+                      {summarySource.map(request => (
+                        <div
+                          key={`${request.category}-${request.id}`}
+                          className="flex items-center justify-between gap-3 rounded-md border border-slate-100 bg-slate-50 px-2.5 py-1.5 dark:border-slate-800 dark:bg-slate-800/70"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate text-xs font-semibold text-slate-800 dark:text-slate-100">
+                              {request.category} / {requestLabel(request, request.category === 'Advance' ? 'advance' : 'items')}
+                            </p>
+                            <p className="text-[11px] text-slate-400">{request.date}</p>
+                          </div>
+
+                          <StatusBadge status={request.status} />
+                        </div>
+                      ))}
+
+                      {summarySource.length === 0 && (
+                        <div className="py-8 text-center text-sm text-slate-400">No matching requests</div>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </section>
-          </main>
-        </div>
+              </section>
+            </main>
+          </div>
         </div>
       </div>
     </div>
@@ -528,6 +698,7 @@ function SupplierWindow({ regNo, tab, requestsByType, onClose }) {
 function SidePanel({
   req,
   draft,
+  statusSaving,
   onDraftChange,
   onApprove,
   onReject,
@@ -548,13 +719,15 @@ function SidePanel({
     <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-4 space-y-4 shadow-sm sticky top-4">
       <div className="flex items-center gap-3 pb-3 border-b border-slate-100 dark:border-slate-700">
         <Avatar name={req.name} />
+
         <div className="min-w-0">
-          <p className="font-semibold text-slate-900 dark:text-white text-sm truncate">{req.name}</p>
+          <p className="font-semibold text-slate-900 dark:text-white text-sm truncate">{req.name || 'Supplier'}</p>
           <p className="text-xs text-slate-400">{req.regNo} / {req.date}</p>
         </div>
       </div>
 
       <button
+        type="button"
         onClick={() => onOpenSupplier(req.regNo)}
         className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-semibold rounded-md border border-green-200 dark:border-green-800 text-green-700 dark:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors"
       >
@@ -566,26 +739,42 @@ function SidePanel({
           <p className="text-[10px] text-slate-400 mb-1">Status</p>
           <StatusBadge status={req.status} />
         </div>
+
         <div className="bg-slate-50 dark:bg-slate-700/50 rounded-md p-3 border border-slate-100 dark:border-slate-700">
           <p className="text-[10px] text-slate-400 mb-1">Date</p>
           <p className="font-semibold text-sm text-slate-700 dark:text-slate-300">{req.date}</p>
         </div>
       </div>
 
+      <div className="grid grid-cols-2 gap-2">
+        <div className="bg-slate-50 dark:bg-slate-700/50 rounded-md p-3 border border-slate-100 dark:border-slate-700">
+          <p className="text-[10px] text-slate-400 mb-1">Request No</p>
+          <p className="font-semibold text-sm text-slate-700 dark:text-slate-300">{req.requestNo || '-'}</p>
+        </div>
+
+        <div className="bg-slate-50 dark:bg-slate-700/50 rounded-md p-3 border border-slate-100 dark:border-slate-700">
+          <p className="text-[10px] text-slate-400 mb-1">Checked By</p>
+          <p className="font-semibold text-sm text-slate-700 dark:text-slate-300">{req.checkedBy || '-'}</p>
+        </div>
+      </div>
+
       {canEdit && (
         <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md">
           <Pencil size={14} className="text-green-700 flex-shrink-0" />
-          <p className="text-xs text-green-700 dark:text-green-300">Only remarks can be edited for pending and rejected requests.</p>
+          <p className="text-xs text-green-700 dark:text-green-300">
+            Only remarks can be edited for pending and rejected requests.
+          </p>
         </div>
       )}
 
       <div>
         <label className="block">
           <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide block mb-1.5">Remarks</span>
+
           <textarea
             value={draft.remarks ?? ''}
             disabled={!canEdit}
-            onChange={e => onDraftChange('remarks', e.target.value)}
+            onChange={event => onDraftChange('remarks', event.target.value)}
             rows={4}
             className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-md px-3 py-2 text-xs text-slate-700 dark:text-slate-300 outline-none resize-none disabled:bg-slate-50 dark:disabled:bg-slate-800 disabled:opacity-70 focus:border-green-500"
             placeholder="Add review remarks"
@@ -596,14 +785,19 @@ function SidePanel({
       {canEdit ? (
         <div className="flex gap-2">
           <button
+            type="button"
+            disabled={statusSaving}
             onClick={() => onReject(req.id)}
-            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"
+            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
           >
             <X size={13} /> Reject
           </button>
+
           <button
+            type="button"
+            disabled={statusSaving}
             onClick={() => onApprove(req.id)}
-            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-md bg-green-700 text-white hover:bg-green-800 transition-colors"
+            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-md bg-green-700 text-white hover:bg-green-800 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Check size={13} /> Approve
           </button>
@@ -611,6 +805,7 @@ function SidePanel({
       ) : (
         <div className="flex items-start gap-2 p-3 bg-slate-50 dark:bg-slate-700/40 border border-slate-200 dark:border-slate-700 rounded-md">
           <Info size={14} className="text-green-600 mt-0.5 flex-shrink-0" />
+
           <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
             This request is <strong className="font-semibold capitalize">{req.status}</strong>.
           </p>
@@ -622,72 +817,241 @@ function SidePanel({
 
 export default function Requests() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const [tab, setTab] = useState(() => getInitialQueryValue(searchParams, 'tab', validTabs, 'advance'))
-  const [filter, setFilter] = useState(() => getInitialQueryValue(searchParams, 'filter', validFilters, 'all'))
+
+  const [tab, setTab] = useState(() => normalizeTab(searchParams.get('tab')))
+  const [filter, setFilter] = useState(() => normalizeFilter(searchParams.get('filter')))
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
-  const [selectedId, setSelectedId] = useState(null)
+  const [selectedKey, setSelectedKey] = useState(null)
   const [draft, setDraft] = useState({})
   const [supplierWindow, setSupplierWindow] = useState(null)
+  const [requestLoading, setRequestLoading] = useState(true)
+  const [requestError, setRequestError] = useState('')
+  const [statusSaving, setStatusSaving] = useState(false)
+  const [refreshKey, setRefreshKey] = useState(0)
 
-  const [advance, setAdvance] = useState(advanceRequests)
-  const [fertilizer, setFertilizer] = useState(fertilizerRequests)
-  const [items, setItems] = useState(itemRequests)
+  const [advance, setAdvance] = useState([])
+  const [fertilizer, setFertilizer] = useState([])
+  const [items, setItems] = useState([])
 
-  const allData = useMemo(() => ({ advance, fertilizer, items }), [advance, fertilizer, items])
-  const selected = selectedId ? allData[tab].find(r => r.id === selectedId) || null : null
+  useEffect(() => {
+    const nextTab = normalizeTab(searchParams.get('tab'))
+    const nextFilter = normalizeFilter(searchParams.get('filter'))
 
-  const filtered = allData[tab].filter(r =>
-    (filter === 'all' || r.status === filter) &&
-    isInDateRange(r.date, fromDate, toDate) &&
-    (r.name.toLowerCase().includes(search.toLowerCase()) || r.regNo.toLowerCase().includes(search.toLowerCase()))
-  )
+    setTab(nextTab)
+    setFilter(nextFilter)
+    setSelectedKey(null)
+    setDraft({})
+  }, [searchParams])
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(search.trim())
+    }, 350)
+
+    return () => window.clearTimeout(timer)
+  }, [search])
+
+  useEffect(() => {
+    const controller = new AbortController()
+
+    setRequestLoading(true)
+    setRequestError('')
+
+    dashboardRequestsApi
+      .list({
+        search: debouncedSearch,
+        fromDate,
+        toDate,
+        signal: controller.signal,
+      })
+      .then(result => {
+        setAdvance(result.advance)
+        setFertilizer(result.fertilizer)
+        setItems(result.items)
+
+        setSelectedKey(currentKey => {
+          if (!currentKey) return null
+
+          const allRows = [
+            ...result.advance.map(row => ({ ...row, requestType: 'advance' })),
+            ...result.fertilizer.map(row => ({ ...row, requestType: 'fertilizer' })),
+            ...result.items.map(row => ({ ...row, requestType: 'items' })),
+          ]
+
+          return allRows.some(row => `${row.requestType}-${row.id}` === currentKey)
+            ? currentKey
+            : null
+        })
+      })
+      .catch(error => {
+        if (error.name !== 'AbortError') {
+          setRequestError(error.message || 'Unable to load dashboard requests')
+        }
+      })
+      .finally(() => {
+        setRequestLoading(false)
+      })
+
+    return () => {
+      controller.abort()
+    }
+  }, [debouncedSearch, fromDate, refreshKey, toDate])
+
+  const allData = useMemo(() => ({
+    advance,
+    fertilizer,
+    items,
+  }), [advance, fertilizer, items])
+
+  const selected = useMemo(() => {
+    if (!selectedKey) return null
+
+    return allData[tab].find(row => `${tab}-${row.id}` === selectedKey) || null
+  }, [allData, selectedKey, tab])
+
+  const filtered = useMemo(() => (
+    allData[tab].filter(row => {
+      const term = search.trim().toLowerCase()
+
+      const matchesFilter = filter === 'all' || row.status === filter
+      const matchesDate = isInDateRange(row.date, fromDate, toDate)
+      const matchesSearch = !term ||
+        row.name.toLowerCase().includes(term) ||
+        row.regNo.toLowerCase().includes(term) ||
+        row.requestNo.toLowerCase().includes(term) ||
+        row.type.toLowerCase().includes(term)
+
+      return matchesFilter && matchesDate && matchesSearch
+    })
+  ), [allData, filter, fromDate, search, tab, toDate])
 
   const tabRows = allData[tab]
+
   const requestStats = [
-    { label: 'All Requests', value: tabRows.length, tone: 'text-slate-900 dark:text-white' },
-    { label: 'Pending Review', value: tabRows.filter(r => r.status === 'pending').length, tone: 'text-amber-700 dark:text-amber-300' },
-    { label: 'Approved', value: tabRows.filter(r => r.status === 'approved').length, tone: 'text-green-700 dark:text-green-300' },
-    { label: 'Rejected', value: tabRows.filter(r => r.status === 'rejected').length, tone: 'text-red-600 dark:text-red-300' },
+    {
+      label: 'All Requests',
+      value: tabRows.length,
+      tone: 'text-slate-900 dark:text-white',
+    },
+    {
+      label: 'Pending Review',
+      value: tabRows.filter(row => row.status === 'pending').length,
+      tone: 'text-amber-700 dark:text-amber-300',
+    },
+    {
+      label: 'Approved',
+      value: tabRows.filter(row => row.status === 'approved').length,
+      tone: 'text-green-700 dark:text-green-300',
+    },
+    {
+      label: 'Rejected',
+      value: tabRows.filter(row => row.status === 'rejected').length,
+      tone: 'text-red-600 dark:text-red-300',
+    },
   ]
 
   function countFor(status) {
-    const data = allData[tab].filter(r => isInDateRange(r.date, fromDate, toDate))
-    return status === 'all' ? data.length : data.filter(r => r.status === status).length
+    const data = allData[tab].filter(row => isInDateRange(row.date, fromDate, toDate))
+    return status === 'all' ? data.length : data.filter(row => row.status === status).length
+  }
+
+  function updateSearchParams(nextTab, nextFilter) {
+    const params = {}
+
+    if (nextTab && nextTab !== 'advance') params.tab = nextTab
+    if (nextFilter && nextFilter !== 'all') params.filter = nextFilter
+
+    setSearchParams(params)
+  }
+
+  function handleTabChange(nextTab) {
+    const normalized = normalizeTab(nextTab)
+
+    setTab(normalized)
+    setFilter('all')
+    setSelectedKey(null)
+    setDraft({})
+    updateSearchParams(normalized, 'all')
+  }
+
+  function handleFilterChange(nextFilter) {
+    const normalized = normalizeFilter(nextFilter)
+
+    setFilter(normalized)
+    setSelectedKey(null)
+    setDraft({})
+    updateSearchParams(tab, normalized)
   }
 
   function selectRow(row) {
-    const nextSelected = selectedId === row.id ? null : row
-    setSelectedId(nextSelected?.id ?? null)
-    setDraft(nextSelected ? { ...nextSelected } : {})
+    const rowKey = `${tab}-${row.id}`
+    const isSame = selectedKey === rowKey
+
+    setSelectedKey(isSame ? null : rowKey)
+    setDraft(isSame ? {} : { ...row })
   }
 
   function updateTabData(updater) {
-    const setter = tab === 'advance' ? setAdvance : tab === 'fertilizer' ? setFertilizer : setItems
-    setter(prev => updater(prev))
+    if (tab === 'advance') {
+      setAdvance(previous => updater(previous))
+      return
+    }
+
+    if (tab === 'fertilizer') {
+      setFertilizer(previous => updater(previous))
+      return
+    }
+
+    setItems(previous => updater(previous))
   }
 
-  function updateStatus(id, status) {
-    updateTabData(prev => prev.map(r => r.id === id ? { ...r, status, checkedBy: 'Current User', remarks: draft.remarks ?? r.remarks } : r))
-    setDraft(prev => ({ ...prev, status, checkedBy: 'Current User' }))
-  }
+  async function updateStatus(id, status) {
+    if (statusSaving) return
 
-  function handleDraftChange(key, value) {
-    setDraft(prev => ({ ...prev, [key]: value }))
-    if (key === 'remarks' && selectedId) {
-      updateTabData(prev => prev.map(r => r.id === selectedId ? { ...r, remarks: value } : r))
+    setStatusSaving(true)
+    setRequestError('')
+
+    try {
+      const updated = await dashboardRequestsApi.updateStatus({
+        requestType: tab,
+        id,
+        status,
+        remarks: draft.remarks ?? '',
+      })
+
+      updateTabData(previous => previous.map(row => (
+        row.id === id ? updated : row
+      )))
+
+      setDraft(updated)
+      setSelectedKey(`${tab}-${updated.id}`)
+      setRefreshKey(current => current + 1)
+    } catch (error) {
+      setRequestError(error.message || 'Unable to update request status')
+    } finally {
+      setStatusSaving(false)
     }
   }
 
-  function resetFiltersForTab(nextTab) {
-    setTab(nextTab)
-    setSearchParams({})
-    setSelectedId(null)
-    setDraft({})
-    setFilter('all')
-    setSearch('')
+  function handleDraftChange(key, value) {
+    setDraft(previous => ({
+      ...previous,
+      [key]: value,
+    }))
+
+    if (key === 'remarks' && selectedKey) {
+      updateTabData(previous => previous.map(row => (
+        `${tab}-${row.id}` === selectedKey
+          ? { ...row, remarks: value }
+          : row
+      )))
+    }
   }
+
+  const tableColumnCount = tab === 'advance' ? 7 : 8
 
   return (
     <div className="space-y-5">
@@ -697,12 +1061,20 @@ export default function Requests() {
             <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 text-xs font-semibold mb-3">
               <Leaf size={13} /> Tea Supplier Operations
             </div>
+
             <h2 className="text-xl font-bold text-slate-900 dark:text-white">Request Management</h2>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Review advances, fertilizer, and item requests with supplier production context.</p>
+
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+              Review advances, fertilizer, and item requests with supplier production context.
+            </p>
           </div>
+
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full lg:w-auto">
             {requestStats.map(stat => (
-              <div key={stat.label} className="min-w-28 rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-3 py-2">
+              <div
+                key={stat.label}
+                className="min-w-28 rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-3 py-2"
+              >
                 <p className="text-[10px] uppercase tracking-wide font-semibold text-slate-400">{stat.label}</p>
                 <p className={`text-lg font-bold ${stat.tone}`}>{stat.value}</p>
               </div>
@@ -712,132 +1084,209 @@ export default function Requests() {
       </div>
 
       <div className="flex gap-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-1 w-fit shadow-sm">
-        {tabs.map(t => (
-          <button
-            key={t.id}
-            onClick={() => resetFiltersForTab(t.id)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold capitalize transition-colors ${
-              tab === t.id ? tabActiveClass[t.id] : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
-            }`}
-          >
-            <t.icon size={15} />
-            {t.label}
-          </button>
-        ))}
+        {tabs.map(tabItem => {
+          const Icon = tabItem.icon
+
+          return (
+            <button
+              key={tabItem.id}
+              type="button"
+              onClick={() => handleTabChange(tabItem.id)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold capitalize transition-colors ${
+                tab === tabItem.id
+                  ? tabActiveClass[tabItem.id]
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+              }`}
+            >
+              <Icon size={15} />
+              {tabItem.label}
+            </button>
+          )
+        })}
       </div>
 
-      <div className="flex gap-4 items-start">
-        <div className="flex-1 min-w-0 space-y-3">
-          <div className="flex items-center gap-2 flex-wrap bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-3 shadow-sm">
-            <div className="relative">
-              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="Search by RegNo / Name..."
-                className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-md pl-8 pr-3 py-2 text-sm outline-none text-slate-700 dark:text-slate-300 placeholder-slate-400 w-56 focus:border-green-500 transition-colors"
-              />
+      {requestError && (
+        <div className="flex items-start justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-900/15 dark:text-red-300">
+          <div className="flex items-start gap-2">
+            <Info size={16} className="mt-0.5 flex-shrink-0" />
+
+            <div>
+              <p className="font-semibold">Request data could not be synchronized</p>
+              <p className="text-xs opacity-80">{requestError}</p>
             </div>
-
-            <label className="flex items-center gap-2 text-xs text-slate-500">
-              From
-              <input
-                type="date"
-                value={fromDate}
-                onChange={e => setFromDate(e.target.value)}
-                className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-md px-2 py-2 text-xs text-slate-700 dark:text-slate-300 outline-none focus:border-green-500"
-              />
-            </label>
-            <label className="flex items-center gap-2 text-xs text-slate-500">
-              To
-              <input
-                type="date"
-                value={toDate}
-                onChange={e => setToDate(e.target.value)}
-                className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-md px-2 py-2 text-xs text-slate-700 dark:text-slate-300 outline-none focus:border-green-500"
-              />
-            </label>
-
-            {['all', 'pending', 'approved', 'rejected'].map(status => (
-              <button
-                key={status}
-                onClick={() => { setFilter(status); setSelectedId(null); setDraft({}) }}
-                className={`px-3 py-1.5 rounded-md text-xs font-semibold capitalize transition-colors border ${
-                  filter === status
-                    ? filterActiveClass[tab]
-                    : 'border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
-                }`}
-              >
-                {status} ({countFor(status)})
-              </button>
-            ))}
           </div>
 
-          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden shadow-sm">
+          <button
+            type="button"
+            onClick={() => setRefreshKey(current => current + 1)}
+            className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-white px-2.5 py-1 text-xs font-semibold text-red-700 transition hover:bg-red-50 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-300"
+          >
+            <RefreshCw size={13} />
+            Retry
+          </button>
+        </div>
+      )}
+
+      <div className="flex flex-col gap-4 xl:flex-row">
+        <div className="min-w-0 flex-1">
+          <div className="rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-700">
+              <div className="flex min-w-72 flex-1 items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 dark:border-slate-700 dark:bg-slate-900">
+                <Search size={18} className="text-slate-400" />
+
+                <input
+                  value={search}
+                  onChange={event => setSearch(event.target.value)}
+                  placeholder="Search by reg no, supplier, request no, or type"
+                  className="w-full bg-transparent py-2.5 text-sm text-slate-700 outline-none placeholder:text-slate-400 dark:text-slate-200"
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {validFilters.map(status => (
+                  <button
+                    key={status}
+                    type="button"
+                    onClick={() => handleFilterChange(status)}
+                    className={`rounded-lg border px-3 py-2 text-xs font-semibold capitalize transition-colors ${
+                      filter === status
+                        ? filterActiveClass[tab]
+                        : 'border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700'
+                    }`}
+                  >
+                    {status} ({countFor(status)})
+                  </button>
+                ))}
+
+                <button
+                  type="button"
+                  onClick={() => setRefreshKey(current => current + 1)}
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
+                >
+                  <RefreshCw size={16} className={requestLoading ? 'animate-spin' : ''} />
+                  Refresh
+                </button>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-700">
+              <label className="flex items-center gap-2 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                From
+                <input
+                  type="date"
+                  value={fromDate}
+                  onChange={event => setFromDate(event.target.value)}
+                  className="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-green-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                />
+              </label>
+
+              <label className="flex items-center gap-2 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                To
+                <input
+                  type="date"
+                  value={toDate}
+                  onChange={event => setToDate(event.target.value)}
+                  className="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-green-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                />
+              </label>
+
+              {(fromDate || toDate) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFromDate('')
+                    setToDate('')
+                  }}
+                  className="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
+                >
+                  Clear dates
+                </button>
+              )}
+            </div>
+
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60">
-                    {[
-                      'RegNo', 'Name',
-                      ...(tab === 'advance' ? ['Amount'] : ['Type', 'Qty']),
-                      'Date', 'Status', 'Remarks', 'Checked By',
-                    ].map(h => (
-                      <th key={h} className="text-left text-[10px] font-semibold text-slate-400 uppercase tracking-wide py-3 px-4 whitespace-nowrap">
-                        {h}
-                      </th>
-                    ))}
+                  <tr className="border-b border-slate-100 bg-slate-50 dark:border-slate-700 dark:bg-slate-900">
+                    <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-slate-400">Reg No</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-slate-400">Supplier</th>
+
+                    {tab === 'advance' ? (
+                      <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-slate-400">Amount</th>
+                    ) : (
+                      <>
+                        <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-slate-400">Type</th>
+                        <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-slate-400">Quantity</th>
+                      </>
+                    )}
+
+                    <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-slate-400">Date</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-slate-400">Status</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-slate-400">Remarks</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-slate-400">Checked By</th>
                   </tr>
                 </thead>
+
                 <tbody>
-                  {filtered.length === 0 ? (
+                  {requestLoading ? (
                     <tr>
-                      <td colSpan={8} className="py-12 text-center text-slate-400">
+                      <td colSpan={tableColumnCount} className="py-12 text-center text-slate-400">
+                        <RefreshCw size={24} className="mx-auto mb-2 animate-spin opacity-50" />
+                        <p className="text-sm">Loading requests from database...</p>
+                      </td>
+                    </tr>
+                  ) : filtered.length === 0 ? (
+                    <tr>
+                      <td colSpan={tableColumnCount} className="py-12 text-center text-slate-400">
                         <Inbox size={24} className="mx-auto mb-2 opacity-40" />
                         <p className="text-sm">No requests found</p>
                       </td>
                     </tr>
-                  ) : filtered.map(r => (
+                  ) : filtered.map(row => (
                     <tr
-                      key={r.id}
-                      onClick={() => selectRow(r)}
+                      key={`${tab}-${row.id}`}
+                      onClick={() => selectRow(row)}
                       className={`border-b border-slate-50 dark:border-slate-700/50 cursor-pointer transition-colors ${
-                        selected?.id === r.id ? selectedRowClass[tab] : 'hover:bg-slate-50 dark:hover:bg-slate-700/30'
+                        selected?.id === row.id
+                          ? selectedRowClass[tab]
+                          : 'hover:bg-slate-50 dark:hover:bg-slate-700/30'
                       }`}
                     >
-                      <td className="py-3 px-4 font-semibold text-green-600 dark:text-green-400">{r.regNo}</td>
-                      <td className="py-3 px-4 text-slate-700 dark:text-slate-300 font-medium">{r.name}</td>
+                      <td className="py-3 px-4 font-semibold text-green-600 dark:text-green-400">{row.regNo}</td>
+                      <td className="py-3 px-4 text-slate-700 dark:text-slate-300 font-medium">{row.name || '-'}</td>
 
                       {tab === 'advance' ? (
-                        <>
-                          <td className="py-3 px-4 font-bold text-amber-700 dark:text-amber-300">{currency(r.amount)}</td>
-                        </>
+                        <td className="py-3 px-4 font-bold text-amber-700 dark:text-amber-300">{currency(row.amount)}</td>
                       ) : (
                         <>
-                          <td className="py-3 px-4 text-slate-500 dark:text-slate-400">{r.type}</td>
-                          <td className="py-3 px-4 text-slate-500 dark:text-slate-400">{r.qty} {r.unit}</td>
+                          <td className="py-3 px-4 text-slate-500 dark:text-slate-400">{row.type || '-'}</td>
+                          <td className="py-3 px-4 text-slate-500 dark:text-slate-400">
+                            {Number(row.qty || 0).toLocaleString()} {row.unit}
+                          </td>
                         </>
                       )}
 
-                      <td className="py-3 px-4 text-slate-400 text-xs whitespace-nowrap">{r.date}</td>
-                      <td className="py-3 px-4"><StatusBadge status={r.status} /></td>
+                      <td className="py-3 px-4 text-slate-400 text-xs whitespace-nowrap">{row.date}</td>
+                      <td className="py-3 px-4"><StatusBadge status={row.status} /></td>
                       <td className="py-3 px-4 text-slate-500 dark:text-slate-400 text-xs max-w-48">
-                        <span className="line-clamp-2">{r.remarks || '-'}</span>
+                        <span className="line-clamp-2">{row.remarks || '-'}</span>
                       </td>
-                      <td className="py-3 px-4 text-slate-400 text-xs">{r.checkedBy}</td>
+                      <td className="py-3 px-4 text-slate-400 text-xs">{row.checkedBy || '-'}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
+
             <RequestTableSummary rows={filtered} tab={tab} />
           </div>
         </div>
 
-        <div className="w-80 flex-shrink-0">
+        <div className="w-full xl:w-80 flex-shrink-0">
           <SidePanel
             req={selected}
             draft={draft}
+            statusSaving={statusSaving}
             onDraftChange={handleDraftChange}
             onApprove={id => updateStatus(id, 'approved')}
             onReject={id => updateStatus(id, 'rejected')}

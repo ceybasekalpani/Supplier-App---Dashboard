@@ -4,8 +4,6 @@ import {
   CheckCircle,
   Clock,
   Droplet,
-  Lock,
-  LogIn,
   Package,
   RefreshCw,
   Search,
@@ -16,7 +14,6 @@ import {
 import Avatar from '../components/ui/Avatar'
 import PageHeader from '../components/ui/PageHeader'
 import StatusBadge from '../components/ui/StatusBadge'
-import { authApi } from '../services/authApi'
 import { supplierDashboardApi } from '../services/supplierDashboardApi'
 import { formatCurrency, formatDisplayDate, formatQuantity } from '../utils/formatters'
 
@@ -84,46 +81,6 @@ const SummaryPill = ({ label, value, tone }) => {
   )
 }
 
-const AuthPrompt = ({ form, error, loading, onChange, onSubmit }) => (
-  <form onSubmit={onSubmit} className="mt-4 grid gap-3 rounded-lg border border-red-200 bg-white p-4 text-slate-700 shadow-sm sm:grid-cols-[1fr_1fr_auto] dark:border-red-900/50 dark:bg-slate-900 dark:text-slate-200">
-    <label className="space-y-1">
-      <span className="text-xs font-bold uppercase tracking-wide text-slate-400">Username</span>
-      <input
-        value={form.username}
-        onChange={event => onChange('username', event.target.value)}
-        autoComplete="username"
-        placeholder="Enter backend username"
-        className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none transition-colors focus:border-green-700 dark:border-slate-700 dark:bg-slate-800"
-      />
-    </label>
-
-    <label className="space-y-1">
-      <span className="text-xs font-bold uppercase tracking-wide text-slate-400">Password</span>
-      <input
-        type="password"
-        value={form.password}
-        onChange={event => onChange('password', event.target.value)}
-        autoComplete="current-password"
-        placeholder="Enter password"
-        className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none transition-colors focus:border-green-700 dark:border-slate-700 dark:bg-slate-800"
-      />
-    </label>
-
-    <button
-      type="submit"
-      disabled={loading}
-      className="inline-flex h-[42px] items-center justify-center gap-2 self-end rounded-lg bg-green-700 px-4 text-sm font-bold text-white transition-colors hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-60"
-    >
-      {loading ? <RefreshCw size={16} className="animate-spin" /> : <LogIn size={16} />}
-      Login
-    </button>
-
-    {error && (
-      <p className="text-xs font-semibold text-red-600 sm:col-span-3">{error}</p>
-    )}
-  </form>
-)
-
 export default function Suppliers() {
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
@@ -138,9 +95,6 @@ export default function Suppliers() {
   const [errorStatus, setErrorStatus] = useState(null)
   const [warning, setWarning] = useState('')
   const [dataSource, setDataSource] = useState('api')
-  const [loginForm, setLoginForm] = useState({ username: '', password: '' })
-  const [loginError, setLoginError] = useState('')
-  const [loginLoading, setLoginLoading] = useState(false)
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 350)
@@ -212,33 +166,6 @@ export default function Suppliers() {
     }
   }
 
-  const handleLoginChange = (field, value) => {
-    setLoginForm(current => ({ ...current, [field]: value }))
-    setLoginError('')
-  }
-
-  const handleLogin = async (event) => {
-    event.preventDefault()
-    const username = loginForm.username.trim()
-
-    if (!username || !loginForm.password) {
-      setLoginError('Username and password are required.')
-      return
-    }
-
-    setLoginLoading(true)
-    setLoginError('')
-
-    try {
-      await authApi.login({ username, password: loginForm.password })
-      setLoginForm({ username: '', password: '' })
-      await loadSuppliers()
-    } catch (loginFailure) {
-      setLoginError(loginFailure.message || 'Login failed. Check username and password.')
-    } finally {
-      setLoginLoading(false)
-    }
-  }
 
   const selectedRequests = selected?.[REQUEST_COLLECTION[requestType]] || []
   const counts = requestCounts(selected)
@@ -270,19 +197,11 @@ export default function Suppliers() {
               : 'border-amber-200 bg-amber-50 text-amber-700'
           }`}
         >
-          {errorStatus === 401 ? <Lock size={18} className="mt-0.5 flex-shrink-0" /> : <AlertCircle size={18} className="mt-0.5 flex-shrink-0" />}
+          <AlertCircle size={18} className="mt-0.5 flex-shrink-0" />
           <div className="flex-1">
             <p className="font-semibold">{error ? (errorStatus === 401 ? 'Authentication required' : 'Supplier data could not be loaded') : 'Using local preview data'}</p>
             <p className="text-xs opacity-80">{error || warning}</p>
-            {errorStatus === 401 && (
-              <AuthPrompt
-                form={loginForm}
-                error={loginError}
-                loading={loginLoading}
-                onChange={handleLoginChange}
-                onSubmit={handleLogin}
-              />
-            )}
+            
           </div>
         </div>
       )}
