@@ -1,34 +1,35 @@
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&display=swap');
 @import "tailwindcss";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
 @layer base {
   :root {
-    --theme-bg: #f8fafc;
+    --theme-bg: #f6f8f7;
     --theme-card: #ffffff;
-    --theme-cardBorder: #e5e7eb;
-    --theme-surface: #f3f4f6;
-    --theme-primary: #2e7d32;
-    --theme-primaryLight: #4caf50;
-    --theme-primaryDark: #1b5e20;
-    --theme-accent: #795548;
-    --theme-text: #212121;
-    --theme-textSecondary: #757575;
-    --theme-textMuted: #9e9e9e;
-    --theme-border: #e5e7eb;
-    --theme-success: #388e3c;
-    --theme-warning: #ffa000;
-    --theme-error: #b71c1c;
-    --theme-info: #0288d1;
+    --theme-cardBorder: #dde6e0;
+    --theme-surface: #f0f4f1;
+    --theme-primary: #237a45;
+    --theme-primaryLight: #3f9b5f;
+    --theme-primaryDark: #155e33;
+    --theme-accent: #2e6c45;
+    --theme-text: #17211b;
+    --theme-textSecondary: #526058;
+    --theme-textMuted: #7c8981;
+    --theme-border: #dde6e0;
+    --theme-success: #237a45;
+    --theme-warning: #6e684d;
+    --theme-error: #b42318;
+    --theme-info: #237a45;
     --theme-white: #ffffff;
-    --theme-inputBg: #f9fafb;
+    --theme-inputBg: #ffffff;
     --theme-tabBar: #ffffff;
-    --theme-shadow: #10182812;
-    --theme-disabled: #bdbdbd;
-    --theme-placeholder: #9e9e9e;
+    --theme-shadow: #13251a18;
+    --theme-disabled: #a7b2ab;
+    --theme-placeholder: #87918b;
     --theme-backdrop: rgba(0,0,0,0.5);
-    --theme-notification: #f57c00;
-    --theme-secondary: #ff8f00;
+    --theme-notification: #237a45;
+    --theme-secondary: #526058;
     --font-xs: 11px;
     --font-sm: 13px;
     --font-base: 15px;
@@ -42,16 +43,100 @@
   body {
     background-color: var(--theme-bg);
     color: var(--theme-text);
+    font-family: 'Roboto', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     font-size: var(--font-base);
+    font-synthesis-weight: none;
+    text-rendering: optimizeLegibility;
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+
+  button,
+  a,
+  input,
+  textarea,
+  select {
+    transition-property: color, background-color, border-color, box-shadow, opacity, transform;
+    transition-duration: 160ms;
+    transition-timing-function: ease;
+  }
+
+  input,
+  textarea,
+  select {
+    background-color: var(--theme-inputBg);
+    border-color: var(--theme-border);
+    color: var(--theme-text);
+  }
+
+  input:focus,
+  textarea:focus,
+  select:focus {
+    border-color: color-mix(in srgb, var(--theme-primary) 45%, var(--theme-border));
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--theme-primary) 16%, transparent);
+    outline: none;
+  }
+
+  select {
+    color-scheme: light;
+    accent-color: var(--theme-primary);
+  }
+
+  option {
+    background-color: var(--theme-card);
+    color: var(--theme-text);
+  }
+
+  option:checked {
+    background-color: color-mix(in srgb, var(--theme-primary) 16%, var(--theme-card));
+    color: var(--theme-primaryDark);
+  }
+
+  option:hover,
+  option:focus,
+  option:active {
+    background-color: color-mix(in srgb, var(--theme-primary) 18%, var(--theme-card)) !important;
+    color: var(--theme-text) !important;
+  }
+
+  .dark select {
+    color-scheme: dark;
   }
 
   input::placeholder,
   textarea::placeholder {
     color: var(--theme-placeholder);
   }
+
+  ::selection {
+    background-color: color-mix(in srgb, var(--theme-primary) 24%, transparent);
+    color: var(--theme-text);
+  }
 }
 
 @layer utilities {
+  .shadow-sm,
+  .shadow,
+  .shadow-lg,
+  .shadow-xl,
+  .shadow-2xl {
+    box-shadow: 0 10px 30px -22px var(--theme-shadow), 0 1px 2px color-mix(in srgb, var(--theme-shadow) 52%, transparent) !important;
+  }
+
+  .rounded-xl,
+  .rounded-2xl {
+    border-radius: 10px !important;
+  }
+
+  .rounded-lg {
+    border-radius: 8px !important;
+  }
+
   .bg-white {
     background-color: var(--theme-card) !important;
   }
@@ -61,9 +146,25 @@
     background-color: var(--theme-surface) !important;
   }
 
+  .hover\:bg-white:hover {
+    background-color: var(--theme-card) !important;
+  }
+
+  .hover\:bg-slate-50:hover,
+  .hover\:bg-slate-100:hover,
+  .dark .dark\:hover\:bg-slate-700:hover,
+  .dark .dark\:hover\:bg-slate-800:hover,
+  .dark .dark\:hover\:bg-slate-900:hover,
+  .dark .dark\:hover\:bg-slate-900\/40:hover {
+    background-color: color-mix(in srgb, var(--theme-primary) 8%, var(--theme-card)) !important;
+  }
+
   .border-slate-100,
   .border-slate-200,
-  .border-slate-300 {
+  .border-slate-300,
+  .border-slate-600,
+  .border-slate-700,
+  .border-slate-800 {
     border-color: var(--theme-border) !important;
   }
 
@@ -80,6 +181,14 @@
   .text-slate-500,
   .text-slate-400 {
     color: var(--theme-textMuted) !important;
+  }
+
+  .bg-black,
+  .bg-slate-950,
+  .bg-slate-900,
+  .bg-slate-800,
+  .bg-slate-700 {
+    background-color: var(--theme-card) !important;
   }
 
   .dark .dark\:bg-slate-950 {
@@ -138,17 +247,44 @@
   }
 
   .bg-green-50,
-  .bg-emerald-50 {
+  .bg-emerald-50,
+  .bg-teal-50,
+  .bg-sky-50,
+  .bg-blue-50,
+  .bg-cyan-50,
+  .bg-amber-50,
+  .bg-yellow-50,
+  .bg-orange-50,
+  .bg-purple-50,
+  .bg-indigo-50 {
     background-color: color-mix(in srgb, var(--theme-primary) 10%, transparent) !important;
   }
 
   .bg-green-100,
-  .bg-emerald-100 {
+  .bg-emerald-100,
+  .bg-teal-100,
+  .bg-sky-100,
+  .bg-blue-100,
+  .bg-cyan-100,
+  .bg-amber-100,
+  .bg-yellow-100,
+  .bg-orange-100,
+  .bg-purple-100,
+  .bg-indigo-100 {
     background-color: color-mix(in srgb, var(--theme-primary) 18%, transparent) !important;
   }
 
   .bg-green-200,
-  .bg-emerald-200 {
+  .bg-emerald-200,
+  .bg-teal-200,
+  .bg-sky-200,
+  .bg-blue-200,
+  .bg-cyan-200,
+  .bg-amber-200,
+  .bg-yellow-200,
+  .bg-orange-200,
+  .bg-purple-200,
+  .bg-indigo-200 {
     background-color: color-mix(in srgb, var(--theme-primary) 28%, transparent) !important;
   }
 
@@ -160,12 +296,51 @@
   .bg-emerald-600,
   .bg-emerald-700,
   .bg-emerald-800,
+  .bg-teal-500,
+  .bg-teal-600,
+  .bg-teal-700,
+  .bg-teal-800,
+  .bg-sky-500,
+  .bg-sky-600,
+  .bg-sky-700,
+  .bg-sky-800,
+  .bg-blue-500,
+  .bg-blue-600,
+  .bg-blue-700,
+  .bg-blue-800,
+  .bg-cyan-500,
+  .bg-cyan-600,
+  .bg-cyan-700,
+  .bg-cyan-800,
+  .bg-amber-500,
+  .bg-amber-600,
+  .bg-amber-700,
+  .bg-amber-800,
+  .bg-orange-500,
+  .bg-orange-600,
+  .bg-orange-700,
+  .bg-orange-800,
   .hover\:bg-green-600:hover,
   .hover\:bg-green-700:hover,
   .hover\:bg-green-800:hover,
   .hover\:bg-emerald-600:hover,
   .hover\:bg-emerald-700:hover,
-  .hover\:bg-emerald-800:hover {
+  .hover\:bg-emerald-800:hover,
+  .hover\:bg-teal-600:hover,
+  .hover\:bg-teal-700:hover,
+  .hover\:bg-teal-800:hover,
+  .hover\:bg-sky-600:hover,
+  .hover\:bg-sky-700:hover,
+  .hover\:bg-sky-800:hover,
+  .hover\:bg-blue-600:hover,
+  .hover\:bg-blue-700:hover,
+  .hover\:bg-blue-800:hover,
+  .hover\:bg-amber-600:hover,
+  .hover\:bg-amber-700:hover,
+  .hover\:bg-amber-800:hover,
+  .hover\:bg-orange-600:hover,
+  .hover\:bg-orange-700:hover,
+  .hover\:bg-orange-800:hover {
     background-color: var(--theme-primary) !important;
   }
 
@@ -181,6 +356,45 @@
   .text-emerald-600,
   .text-emerald-700,
   .text-emerald-800,
+  .text-teal-300,
+  .text-teal-400,
+  .text-teal-500,
+  .text-teal-600,
+  .text-teal-700,
+  .text-teal-800,
+  .text-sky-300,
+  .text-sky-400,
+  .text-sky-500,
+  .text-sky-600,
+  .text-sky-700,
+  .text-sky-800,
+  .text-sky-900,
+  .text-blue-300,
+  .text-blue-400,
+  .text-blue-500,
+  .text-blue-600,
+  .text-blue-700,
+  .text-blue-800,
+  .text-blue-900,
+  .text-cyan-300,
+  .text-cyan-400,
+  .text-cyan-500,
+  .text-cyan-600,
+  .text-cyan-700,
+  .text-cyan-800,
+  .text-cyan-900,
+  .text-amber-300,
+  .text-amber-400,
+  .text-amber-500,
+  .text-amber-600,
+  .text-amber-700,
+  .text-amber-800,
+  .text-orange-300,
+  .text-orange-400,
+  .text-orange-500,
+  .text-orange-600,
+  .text-orange-700,
+  .text-orange-800,
   .hover\:text-green-400:hover,
   .hover\:text-green-500:hover,
   .hover\:text-green-600:hover,
@@ -188,7 +402,15 @@
   .hover\:text-emerald-400:hover,
   .hover\:text-emerald-500:hover,
   .hover\:text-emerald-600:hover,
-  .hover\:text-emerald-700:hover {
+  .hover\:text-emerald-700:hover,
+  .hover\:text-teal-500:hover,
+  .hover\:text-teal-600:hover,
+  .hover\:text-sky-500:hover,
+  .hover\:text-sky-600:hover,
+  .hover\:text-blue-500:hover,
+  .hover\:text-blue-600:hover,
+  .hover\:text-amber-500:hover,
+  .hover\:text-amber-600:hover {
     color: var(--theme-primary) !important;
   }
 
@@ -202,6 +424,24 @@
   .border-emerald-500,
   .border-emerald-700,
   .border-emerald-800,
+  .border-teal-200,
+  .border-teal-300,
+  .border-teal-500,
+  .border-sky-200,
+  .border-sky-300,
+  .border-sky-500,
+  .border-blue-200,
+  .border-blue-300,
+  .border-blue-500,
+  .border-cyan-200,
+  .border-cyan-300,
+  .border-cyan-500,
+  .border-amber-200,
+  .border-amber-300,
+  .border-amber-500,
+  .border-orange-200,
+  .border-orange-300,
+  .border-orange-500,
   .hover\:border-green-300:hover,
   .hover\:border-green-500:hover,
   .hover\:border-emerald-300:hover,
@@ -209,12 +449,20 @@
   .focus\:border-green-400:focus,
   .focus\:border-green-500:focus,
   .focus\:border-emerald-400:focus,
-  .focus\:border-emerald-500:focus {
+  .focus\:border-emerald-500:focus,
+  .focus\:border-teal-500:focus,
+  .focus\:border-sky-500:focus,
+  .focus\:border-blue-500:focus,
+  .focus\:border-amber-500:focus {
     border-color: color-mix(in srgb, var(--theme-primary) 35%, var(--theme-border)) !important;
   }
 
   .focus\:ring-green-500\/20:focus,
-  .focus\:ring-emerald-500\/20:focus {
+  .focus\:ring-emerald-500\/20:focus,
+  .focus\:ring-blue-500\/20:focus,
+  .focus\:ring-sky-500\/20:focus,
+  .focus\:ring-cyan-500\/20:focus,
+  .focus\:ring-amber-500\/20:focus {
     --tw-ring-color: color-mix(in srgb, var(--theme-primary) 20%, transparent) !important;
   }
 
@@ -227,14 +475,41 @@
   .dark .dark\:bg-emerald-900\/15,
   .dark .dark\:bg-emerald-900\/20,
   .dark .dark\:bg-emerald-900\/30,
-  .dark .dark\:bg-emerald-900\/40 {
+  .dark .dark\:bg-emerald-900\/40,
+  .dark .dark\:bg-teal-900\/10,
+  .dark .dark\:bg-teal-900\/20,
+  .dark .dark\:bg-teal-900\/30,
+  .dark .dark\:bg-sky-900\/10,
+  .dark .dark\:bg-sky-900\/20,
+  .dark .dark\:bg-sky-900\/30,
+  .dark .dark\:bg-blue-900\/10,
+  .dark .dark\:bg-blue-900\/20,
+  .dark .dark\:bg-blue-900\/30,
+  .dark .dark\:bg-amber-900\/10,
+  .dark .dark\:bg-amber-900\/15,
+  .dark .dark\:bg-amber-900\/20,
+  .dark .dark\:bg-amber-900\/30,
+  .dark .dark\:bg-orange-900\/10,
+  .dark .dark\:bg-orange-900\/15,
+  .dark .dark\:bg-orange-900\/20 {
     background-color: color-mix(in srgb, var(--theme-primary) 18%, transparent) !important;
   }
 
   .dark .dark\:text-green-300,
   .dark .dark\:text-green-400,
   .dark .dark\:text-emerald-300,
-  .dark .dark\:text-emerald-400 {
+  .dark .dark\:text-emerald-400,
+  .dark .dark\:text-teal-300,
+  .dark .dark\:text-teal-400,
+  .dark .dark\:text-sky-300,
+  .dark .dark\:text-sky-400,
+  .dark .dark\:text-blue-300,
+  .dark .dark\:text-blue-400,
+  .dark .dark\:text-amber-200,
+  .dark .dark\:text-amber-300,
+  .dark .dark\:text-amber-400,
+  .dark .dark\:text-orange-200,
+  .dark .dark\:text-orange-300 {
     color: var(--theme-primary) !important;
   }
 
@@ -243,7 +518,201 @@
   .dark .dark\:border-green-900\/50,
   .dark .dark\:border-emerald-800,
   .dark .dark\:border-emerald-900\/40,
-  .dark .dark\:border-emerald-900\/50 {
+  .dark .dark\:border-emerald-900\/50,
+  .dark .dark\:border-teal-900\/40,
+  .dark .dark\:border-teal-900\/50,
+  .dark .dark\:border-sky-900\/40,
+  .dark .dark\:border-sky-900\/50,
+  .dark .dark\:border-blue-900\/40,
+  .dark .dark\:border-blue-900\/50,
+  .dark .dark\:border-amber-900\/40,
+  .dark .dark\:border-amber-900\/50,
+  .dark .dark\:border-orange-900\/40,
+  .dark .dark\:border-orange-900\/50 {
     border-color: color-mix(in srgb, var(--theme-primary) 35%, var(--theme-border)) !important;
+  }
+
+  .bg-red-50,
+  .bg-rose-50 {
+    background-color: color-mix(in srgb, var(--theme-error) 9%, var(--theme-card)) !important;
+  }
+
+  .bg-red-100,
+  .bg-rose-100 {
+    background-color: color-mix(in srgb, var(--theme-error) 15%, var(--theme-card)) !important;
+  }
+
+  .bg-red-200,
+  .bg-rose-200 {
+    background-color: color-mix(in srgb, var(--theme-error) 24%, var(--theme-card)) !important;
+  }
+
+  .bg-red-500,
+  .bg-red-600,
+  .bg-red-700,
+  .bg-red-800,
+  .bg-rose-500,
+  .bg-rose-600,
+  .bg-rose-700,
+  .bg-rose-800,
+  .hover\:bg-red-600:hover,
+  .hover\:bg-red-700:hover,
+  .hover\:bg-red-800:hover,
+  .hover\:bg-rose-600:hover,
+  .hover\:bg-rose-700:hover,
+  .hover\:bg-rose-800:hover {
+    background-color: var(--theme-error) !important;
+  }
+
+  .text-red-300,
+  .text-red-400,
+  .text-red-500,
+  .text-red-600,
+  .text-red-700,
+  .text-red-800,
+  .text-rose-300,
+  .text-rose-400,
+  .text-rose-500,
+  .text-rose-600,
+  .text-rose-700,
+  .text-rose-800,
+  .hover\:text-red-500:hover,
+  .hover\:text-red-600:hover,
+  .hover\:text-rose-500:hover,
+  .hover\:text-rose-600:hover {
+    color: var(--theme-error) !important;
+  }
+
+  .border-red-200,
+  .border-red-300,
+  .border-red-500,
+  .border-rose-200,
+  .border-rose-300,
+  .border-rose-500,
+  .focus\:border-red-500:focus,
+  .focus\:border-rose-500:focus {
+    border-color: color-mix(in srgb, var(--theme-error) 38%, var(--theme-border)) !important;
+  }
+
+  .focus\:ring-red-500\/20:focus,
+  .focus\:ring-rose-500\/20:focus {
+    --tw-ring-color: color-mix(in srgb, var(--theme-error) 20%, transparent) !important;
+  }
+
+  .dark .dark\:bg-red-900\/10,
+  .dark .dark\:bg-red-900\/15,
+  .dark .dark\:bg-red-900\/20,
+  .dark .dark\:bg-red-900\/30,
+  .dark .dark\:bg-rose-900\/10,
+  .dark .dark\:bg-rose-900\/15,
+  .dark .dark\:bg-rose-900\/20,
+  .dark .dark\:bg-rose-900\/30 {
+    background-color: color-mix(in srgb, var(--theme-error) 17%, transparent) !important;
+  }
+
+  .dark .dark\:text-red-300,
+  .dark .dark\:text-red-400,
+  .dark .dark\:text-rose-300,
+  .dark .dark\:text-rose-400 {
+    color: var(--theme-error) !important;
+  }
+
+  .dark .dark\:border-red-900\/40,
+  .dark .dark\:border-red-900\/50,
+  .dark .dark\:border-rose-900\/40,
+  .dark .dark\:border-rose-900\/50 {
+    border-color: color-mix(in srgb, var(--theme-error) 36%, var(--theme-border)) !important;
+  }
+
+  .accent-blue-500,
+  .accent-sky-500,
+  .accent-cyan-500,
+  input[type='checkbox'],
+  input[type='radio'] {
+    accent-color: var(--theme-primary) !important;
+  }
+
+  .ring-blue-500,
+  .ring-sky-500,
+  .ring-cyan-500 {
+    --tw-ring-color: color-mix(in srgb, var(--theme-primary) 35%, transparent) !important;
+  }
+
+  .text-sky-200,
+  .text-blue-200,
+  .text-cyan-200,
+  .text-indigo-200,
+  .text-indigo-300,
+  .text-indigo-400,
+  .text-indigo-500,
+  .text-indigo-600,
+  .text-indigo-700,
+  .text-indigo-800,
+  .text-indigo-900,
+  .dark .dark\:text-sky-200,
+  .dark .dark\:text-blue-200,
+  .dark .dark\:text-cyan-200,
+  .dark .dark\:text-indigo-200,
+  .dark .dark\:text-indigo-300,
+  .dark .dark\:text-indigo-400 {
+    color: var(--theme-primary) !important;
+  }
+
+  .bg-sky-300,
+  .bg-sky-400,
+  .bg-blue-300,
+  .bg-blue-400,
+  .bg-cyan-300,
+  .bg-cyan-400,
+  .bg-indigo-50,
+  .bg-indigo-100,
+  .bg-indigo-200,
+  .bg-indigo-300,
+  .bg-indigo-400 {
+    background-color: color-mix(in srgb, var(--theme-primary) 18%, transparent) !important;
+  }
+
+  .bg-indigo-500,
+  .bg-indigo-600,
+  .bg-indigo-700,
+  .bg-indigo-800,
+  .hover\:bg-indigo-600:hover,
+  .hover\:bg-indigo-700:hover,
+  .hover\:bg-indigo-800:hover {
+    background-color: var(--theme-primary) !important;
+  }
+
+  .border-sky-400,
+  .border-sky-600,
+  .border-sky-700,
+  .border-blue-400,
+  .border-blue-600,
+  .border-blue-700,
+  .border-cyan-400,
+  .border-cyan-600,
+  .border-cyan-700,
+  .border-indigo-200,
+  .border-indigo-300,
+  .border-indigo-400,
+  .border-indigo-500,
+  .border-indigo-600,
+  .dark .dark\:border-indigo-900\/40,
+  .dark .dark\:border-indigo-900\/50 {
+    border-color: color-mix(in srgb, var(--theme-primary) 34%, var(--theme-border)) !important;
+  }
+
+  table thead,
+  .bg-gradient-to-r,
+  .bg-gradient-to-br {
+    background-image: none !important;
+    background-color: var(--theme-surface) !important;
+  }
+
+  tbody tr:hover {
+    background-color: color-mix(in srgb, var(--theme-primary) 7%, var(--theme-card)) !important;
+  }
+
+  .uppercase {
+    letter-spacing: 0.04em !important;
   }
 }

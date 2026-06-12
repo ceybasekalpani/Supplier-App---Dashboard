@@ -10,9 +10,9 @@ import {
 } from 'recharts'
 
 const series = [
-  { key: 'advance', label: 'Advance', color: '#f59e0b' },
-  { key: 'fertilizer', label: 'Fertilizer', color: '#16a34a' },
-  { key: 'items', label: 'Items', color: '#0284c7' },
+  { key: 'advance', label: 'Advance', color: '#2f6f48' },
+  { key: 'fertilizer', label: 'Fertilizer', color: '#4f9d66' },
+  { key: 'items', label: 'Items', color: '#8a9a90' },
 ]
 
 function ChartTooltip({ active, payload, label }) {
@@ -64,10 +64,10 @@ export default function MonthlyRequestChart({ data }) {
       <div className="h-72 min-h-72 min-w-0">
         <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={288} debounce={50}>
           <BarChart data={data} margin={{ top: 8, right: 8, left: -18, bottom: 0 }} barGap={7}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-            <XAxis dataKey="name" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
-            <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
-            <Tooltip content={<ChartTooltip />} cursor={{ fill: 'rgba(15, 23, 42, 0.04)' }} />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--theme-border)" vertical={false} />
+            <XAxis dataKey="name" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: 'var(--theme-textMuted)' }} />
+            <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: 'var(--theme-textMuted)' }} />
+            <Tooltip content={<ChartTooltip />} cursor={{ fill: 'color-mix(in srgb, var(--theme-primary) 7%, transparent)' }} />
             {series.map((item) => (
               <Bar
                 key={item.key}

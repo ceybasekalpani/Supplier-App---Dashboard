@@ -99,7 +99,7 @@ export default function DashboardStats({ stats }) {
           >
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className={`text-xs font-semibold uppercase tracking-wide ${style.header}`}>{item.label} Requests</p>
+                <p className={`text-xs font-semibold uppercase tracking-wide ${style.header}`}>{item.label} </p>
                 <p className="mt-1 text-3xl font-bold text-slate-900 dark:text-white">{item.total}</p>
                 <p className="text-xs text-slate-500 dark:text-slate-400">Total request count</p>
               </div>
