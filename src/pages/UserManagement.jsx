@@ -1,6 +1,7 @@
 // UserManagement.jsx
 import { useEffect, useState, useRef } from 'react';
-import { Pencil, Trash2, Camera, X, Search, RefreshCw } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Pencil, Trash2, Camera, X, Search, RefreshCw, Eye, EyeOff, KeyRound, ShieldCheck } from 'lucide-react';
 import Avatar from '../components/ui/Avatar';
 import FormInput from '../components/ui/FormInput';
 import StatusBadge from '../components/ui/StatusBadge';
@@ -18,6 +19,8 @@ const UserManagement = () => {
     fullName: '', email: '', username: '', password: '', phoneNo: '', role: 'Admin', status: 'active'
   });
   const [imagePreview, setImagePreview] = useState(null);
+  const [showFormPassword, setShowFormPassword] = useState(false);
+  const [visiblePasswordUserId, setVisiblePasswordUserId] = useState(null);
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -74,7 +77,7 @@ const UserManagement = () => {
 
   const resetForm = () => {
     setFormData({ fullName: '', email: '', username: '', password: '', phoneNo: '', role: 'Admin', status: 'active' });
-    setImagePreview(null); setEditingUser(null); setErrors({});
+    setImagePreview(null); setEditingUser(null); setErrors({}); setShowFormPassword(false);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -227,7 +230,22 @@ const UserManagement = () => {
                           <div>
                             <p className="font-medium text-slate-900 dark:text-white">{user.name}</p>
                             <p className="text-xs text-slate-500 dark:text-slate-400">{user.email}</p>
+                            <p className="text-xs text-slate-400 mt-0.5">@{user.username}</p>
                             {user.phoneNo && <p className="text-xs text-slate-400 mt-0.5">{user.phoneNo}</p>}
+                            {user.password && (
+                              <div className="mt-1 inline-flex items-center gap-1.5 rounded-md bg-slate-100 px-2 py-0.5 text-xs text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+                                <KeyRound size={11} />
+                                <span className="font-mono">{visiblePasswordUserId === user.id ? user.password : '********'}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setVisiblePasswordUserId(current => current === user.id ? null : user.id)}
+                                  className="text-slate-500 hover:text-slate-900 dark:hover:text-white"
+                                  title={visiblePasswordUserId === user.id ? 'Hide password' : 'Show password'}
+                                >
+                                  {visiblePasswordUserId === user.id ? <EyeOff size={12} /> : <Eye size={12} />}
+                                </button>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </td>
@@ -235,6 +253,9 @@ const UserManagement = () => {
                       <td className="py-3 px-4 text-right">
                         <div className="flex justify-end gap-2">
                           <button onClick={() => handleEdit(user)} className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"><Pencil size={14} /></button>
+                          <Link to={`/settings?userId=${user.id}`} className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors" title="Manage permissions">
+                            <ShieldCheck size={14} />
+                          </Link>
                           <button onClick={() => setShowDeleteConfirm(user.id)} className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-colors"><Trash2 size={14} /></button>
                         </div>
                       </td>
@@ -266,18 +287,15 @@ const UserManagement = () => {
 
             {/* Form Fields */}
             <div className="space-y-3">
-              {['fullName', 'email', 'username', 'password', 'phoneNo'].map((field) => {
-                const isPassword = field === 'password';
-                const label = { fullName: 'Full Name', email: 'Email Address', username: 'Username', password: 'Password', phoneNo: 'Phone Number' }[field];
+              {['fullName', 'email', 'username', 'phoneNo'].map((field) => {
+                const label = { fullName: 'Full Name', email: 'Email Address', username: 'Username', phoneNo: 'Phone Number' }[field];
                 const required = field !== 'phoneNo';
-                const showField = !(isPassword && editingUser);
-                if (!showField) return null;
                 return (
                   <FormInput
                     key={field}
                     label={label}
                     name={field}
-                    type={isPassword ? 'password' : 'text'}
+                    type="text"
                     value={formData[field]}
                     required={required}
                     error={errors[field]}
@@ -286,6 +304,36 @@ const UserManagement = () => {
                   />
                 );
               })}
+              <div>
+                <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
+                  {editingUser ? 'New Password' : 'Password'} {!editingUser && <span className="text-rose-500">*</span>}
+                </label>
+                <div className="relative">
+                  <input
+                    type={showFormPassword ? 'text' : 'password'}
+                    name="password"
+                    value={formData.password}
+                    autoComplete="new-password"
+                    placeholder={editingUser ? 'Leave blank to keep current password' : 'Enter password'}
+                    onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 pr-10 text-sm text-slate-900 focus:ring-2 focus:ring-emerald-500/20 dark:border-slate-600 dark:bg-slate-900 dark:text-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowFormPassword(current => !current)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-white"
+                    title={showFormPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showFormPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+                {errors.password && <p className="mt-1 text-xs text-rose-500">{errors.password}</p>}
+                {editingUser && (
+                  <p className="mt-1 text-xs text-slate-400">
+                    Existing stored passwords cannot be viewed unless the API returns a plain or temporary password.
+                  </p>
+                )}
+              </div>
               <div>
                 <div>
                   <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Status</label>

@@ -24,29 +24,9 @@ import {
   leafDeliveries,
   leafRates,
 } from '../data/mockData'
+import StatusBadge, { getStatusChartColor } from '../components/ui/StatusBadge'
 import { dashboardRequestsApi } from '../services/dashboardRequestsApi'
 import { supplierDashboardApi } from '../services/supplierDashboardApi'
-
-const STATUS_STYLES = {
-  pending: {
-    pill: 'bg-amber-50 text-amber-700 border border-amber-200',
-    dot: 'bg-amber-400',
-  },
-  approved: {
-    pill: 'bg-green-50 text-green-700 border border-green-200',
-    dot: 'bg-green-500',
-  },
-  rejected: {
-    pill: 'bg-red-50 text-red-600 border border-red-200',
-    dot: 'bg-red-400',
-  },
-}
-
-const STATUS_COLORS = {
-  pending: '#f59e0b',
-  approved: '#16a34a',
-  rejected: '#dc2626',
-}
 
 const tabs = [
   { id: 'advance', label: 'Advance Requests', icon: Banknote },
@@ -87,18 +67,6 @@ function normalizeTab(value) {
 function normalizeFilter(value) {
   const filter = String(value || '').trim().toLowerCase()
   return validFilters.includes(filter) ? filter : 'all'
-}
-
-function StatusBadge({ status }) {
-  const normalized = String(status || 'pending').trim().toLowerCase()
-  const style = STATUS_STYLES[normalized] || STATUS_STYLES.pending
-
-  return (
-    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${style.pill}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${style.dot}`} />
-      {normalized}
-    </span>
-  )
 }
 
 function initials(name = '') {
@@ -501,9 +469,7 @@ function SupplierWindow({ regNo, tab, requestsByType, onClose }) {
                 <div className="flex items-center gap-2">
                   <h3 className="truncate text-xl font-bold text-slate-950 dark:text-white">{supplier.name}</h3>
 
-                  <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700 ring-1 ring-emerald-100 dark:bg-emerald-900/25 dark:text-emerald-300 dark:ring-emerald-900/50">
-                    {supplier.status || 'active'}
-                  </span>
+                  <StatusBadge status={supplier.status || 'active'} className="text-[10px] font-bold uppercase" />
                 </div>
 
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
@@ -665,7 +631,7 @@ function SupplierWindow({ regNo, tab, requestsByType, onClose }) {
                         <PieChart>
                           <Pie data={summary} dataKey="value" nameKey="name" innerRadius={32} outerRadius={56} paddingAngle={3}>
                             {summary.map(item => (
-                              <Cell key={item.name} fill={STATUS_COLORS[item.name]} />
+                              <Cell key={item.name} fill={getStatusChartColor(item.name)} />
                             ))}
                           </Pie>
                           <Tooltip />

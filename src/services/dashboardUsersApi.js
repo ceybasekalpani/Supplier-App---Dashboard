@@ -1,5 +1,7 @@
 import { adminApiRequest } from './adminApiClient'
 
+const DASHBOARD_USER_PASSWORDS_KEY = 'dashboardUserPasswords'
+
 const getValue = (source, camelKey, pascalKey = camelKey[0].toUpperCase() + camelKey.slice(1)) => (
   source?.[camelKey] ?? source?.[pascalKey]
 )
@@ -11,6 +13,7 @@ const dateOnly = (value) => {
 
 const normalizeUser = (row) => {
   const fullName = String(getValue(row, 'fullName') || getValue(row, 'name') || '')
+  const password = getValue(row, 'password') || getValue(row, 'plainPassword') || getValue(row, 'temporaryPassword') || ''
 
   return {
     id: Number(getValue(row, 'id') || 0),
@@ -22,8 +25,53 @@ const normalizeUser = (row) => {
     role: String(getValue(row, 'role') || 'Admin'),
     status: String(getValue(row, 'status') || 'active').trim().toLowerCase(),
     avatar: getValue(row, 'avatar') || null,
+    password: password ? String(password) : '',
+    isSuperAdmin: getValue(row, 'isSuperAdmin') === true || String(getValue(row, 'isSuperAdmin')).toLowerCase() === 'true',
     createdAt: dateOnly(getValue(row, 'createdAt')),
     lastLoginAt: dateOnly(getValue(row, 'lastLoginAt')),
+  }
+}
+
+const readSavedPasswords = () => {
+  try {
+    return JSON.parse(localStorage.getItem(DASHBOARD_USER_PASSWORDS_KEY) || '{}')
+  } catch {
+    return {}
+  }
+}
+
+const writeSavedPasswords = passwords => {
+  localStorage.setItem(DASHBOARD_USER_PASSWORDS_KEY, JSON.stringify(passwords))
+}
+
+const rememberPassword = (user, password) => {
+  if (!user?.id || !password) return mergeSavedPassword(user)
+
+  const passwords = readSavedPasswords()
+  passwords[user.id] = {
+    username: user.username,
+    password,
+  }
+  writeSavedPasswords(passwords)
+
+  return {
+    ...user,
+    password,
+  }
+}
+
+const forgetPassword = id => {
+  const passwords = readSavedPasswords()
+  delete passwords[id]
+  writeSavedPasswords(passwords)
+}
+
+const mergeSavedPassword = user => {
+  const saved = readSavedPasswords()[user.id]
+
+  return {
+    ...user,
+    password: user.password || saved?.password || '',
   }
 }
 
@@ -35,7 +83,7 @@ const normalizeSummary = (summary = {}) => ({
 
 const normalizeResponse = (response = {}) => ({
   summary: normalizeSummary(getValue(response, 'summary')),
-  users: (getValue(response, 'users') || []).map(normalizeUser),
+  users: (getValue(response, 'users') || []).map(normalizeUser).map(mergeSavedPassword),
   roles: (getValue(response, 'roles') || []).map(role => String(role)),
 })
 
@@ -71,7 +119,7 @@ export const dashboardUsersApi = {
       body: JSON.stringify(buildUserPayload(form)),
     })
 
-    return normalizeUser(response)
+    return rememberPassword(normalizeUser(response), form.password)
   },
 
   async update(id, form) {
@@ -80,12 +128,16 @@ export const dashboardUsersApi = {
       body: JSON.stringify(buildUserPayload(form, { editing: true })),
     })
 
-    return normalizeUser(response)
+    return rememberPassword(normalizeUser(response), form.password)
   },
 
   async delete(id) {
-    return adminApiRequest(`/api/DashboardUsers/${id}`, {
+    const response = await adminApiRequest(`/api/DashboardUsers/${id}`, {
       method: 'DELETE',
     })
+
+    forgetPassword(id)
+
+    return response
   },
 }

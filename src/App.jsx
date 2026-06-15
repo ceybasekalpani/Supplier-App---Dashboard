@@ -12,30 +12,31 @@ import Configurations from './pages/Configurations'
 import Communication from './pages/Communication'
 import UserManagement from './pages/UserManagement'
 import Settings from './pages/Settings'
+import { PERMISSIONS } from './services/adminPermissions'
 
 export default function App() {
   return (
     <ThemeProvider>
       <BrowserRouter>
         <Routes>
+          <Route index element={<AdminLogin />} />
           <Route path="/login" element={<AdminLogin />} />
 
           <Route element={<AdminProtectedRoute />}>
             <Route element={<AppLayout />}>
-              <Route index element={<Dashboard />} />
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/suppliers" element={<Suppliers />} />
-              <Route path="/requests" element={<Requests />} />
-              <Route path="/disbursements" element={<DisbursementManager />} />
-              <Route path="/disbursement-tracking" element={<DisbursementTracking />} />
-              <Route path="/configurations" element={<Configurations />} />
-              <Route path="/communication" element={<Communication />} />
-              <Route path="/user-management" element={<UserManagement />} />
-              <Route path="/settings" element={<Settings />} />
+              <Route path="/dashboard" element={<AdminProtectedRoute permission={PERMISSIONS.dashboard}><Dashboard /></AdminProtectedRoute>} />
+              <Route path="/suppliers" element={<AdminProtectedRoute permission={PERMISSIONS.suppliers}><Suppliers /></AdminProtectedRoute>} />
+              <Route path="/requests" element={<AdminProtectedRoute permission={PERMISSIONS.requests}><Requests /></AdminProtectedRoute>} />
+              <Route path="/disbursements" element={<AdminProtectedRoute permission={PERMISSIONS.disbursements}><DisbursementManager /></AdminProtectedRoute>} />
+              <Route path="/disbursement-tracking" element={<AdminProtectedRoute permission={PERMISSIONS.disbursementTracking}><DisbursementTracking /></AdminProtectedRoute>} />
+              <Route path="/configurations" element={<AdminProtectedRoute permission={PERMISSIONS.configurations}><Configurations /></AdminProtectedRoute>} />
+              <Route path="/communication" element={<AdminProtectedRoute permission={PERMISSIONS.communication}><Communication /></AdminProtectedRoute>} />
+              <Route path="/user-management" element={<AdminProtectedRoute permission={PERMISSIONS.userManagement}><UserManagement /></AdminProtectedRoute>} />
+              <Route path="/settings" element={<AdminProtectedRoute permission={PERMISSIONS.permissions}><Settings /></AdminProtectedRoute>} />
             </Route>
           </Route>
 
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </BrowserRouter>
     </ThemeProvider>

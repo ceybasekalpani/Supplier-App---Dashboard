@@ -15,7 +15,7 @@ export default function AdminLogin() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const redirectTo = location.state?.from?.pathname || '/'
+  const redirectTo = location.state?.from?.pathname || '/dashboard'
 
   const handleChange = (field, value) => {
     setForm(current => ({

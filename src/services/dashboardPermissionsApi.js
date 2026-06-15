@@ -6,6 +6,7 @@ const getValue = (source, camelKey, pascalKey = camelKey[0].toUpperCase() + came
 
 const normalizeUser = (row) => {
   const fullName = String(getValue(row, 'fullName') || getValue(row, 'name') || '')
+  const isSuperAdmin = getValue(row, 'isSuperAdmin') === true || String(getValue(row, 'isSuperAdmin')).toLowerCase() === 'true'
 
   return {
     id: Number(getValue(row, 'id') || 0),
@@ -17,6 +18,7 @@ const normalizeUser = (row) => {
     role: String(getValue(row, 'role') || 'Admin'),
     status: String(getValue(row, 'status') || 'active').trim().toLowerCase(),
     avatar: getValue(row, 'avatar') || null,
+    isSuperAdmin,
   }
 }
 

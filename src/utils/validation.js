@@ -27,6 +27,8 @@ export const validateUserForm = (formData, { editing = false } = {}) => {
   if (!editing) {
     if (!formData.password) errors.password = 'Password is required'
     else if (String(formData.password).length < 6) errors.password = 'Password must be at least 6 characters'
+  } else if (formData.password && String(formData.password).length < 6) {
+    errors.password = 'New password must be at least 6 characters'
   }
 
   if (!isValidPhone(formData.phoneNo)) errors.phoneNo = 'Invalid phone number'

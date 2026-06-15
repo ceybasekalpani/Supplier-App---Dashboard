@@ -1,15 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   AlertCircle,
-  CheckCircle,
-  Clock,
   Droplet,
   Package,
   RefreshCw,
   Search,
   ShoppingBag,
   UserRound,
-  XCircle,
 } from 'lucide-react'
 import Avatar from '../components/ui/Avatar'
 import PageHeader from '../components/ui/PageHeader'
@@ -43,12 +40,6 @@ const monthLabel = (month) => {
 const getRequestTitle = (request, type) => {
   if (type === 'advance') return formatCurrency(request.amount)
   return `${request.type || 'Request'} - ${formatQuantity(request.qty, request.unit)}`
-}
-
-const getStatusIcon = (status) => {
-  if (status === 'approved') return <CheckCircle size={14} className="text-green-600" />
-  if (status === 'rejected') return <XCircle size={14} className="text-red-600" />
-  return <Clock size={14} className="text-amber-600" />
 }
 
 const requestCounts = (supplier) => ({
@@ -378,10 +369,7 @@ export default function Suppliers() {
                               {request.requestNo ? `${request.requestNo} / ` : ''}{formatDisplayDate(request.date)}
                             </p>
                           </div>
-                          <div className="flex items-center gap-1 text-xs font-bold capitalize text-slate-600 dark:text-slate-300">
-                            {getStatusIcon(request.status)}
-                            {request.status}
-                          </div>
+                          <StatusBadge status={request.status} />
                         </div>
 
                         <div className="mt-3 grid gap-2 rounded-md bg-white p-2 text-xs dark:bg-slate-800">

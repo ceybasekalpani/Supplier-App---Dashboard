@@ -6,6 +6,7 @@ import {
   Leaf, RefreshCw
 } from 'lucide-react'
 import { disbursementApi } from '../services/disbursementApi'
+import StatusBadge from '../components/ui/StatusBadge'
 import { downloadPdf } from '../utils/pdf'
 
 const formatDisplayDate = (date) => {
@@ -686,9 +687,7 @@ Thank you for your partnership with Ceylon Tea Factory
                       <td className="py-3 px-4 font-bold text-amber-600 dark:text-amber-400">Rs.{item.approvedAmount.toLocaleString()}</td>
                       <td className="py-3 px-4">
                         {item.issued ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-green-100 text-green-700 text-xs font-medium">
-                            <CheckCircle2 size={12} /> Issued via {item.paymentMethod || paymentMethods[item.id] || 'N/A'}
-                          </span>
+                          <StatusBadge status={`issued via ${item.paymentMethod || paymentMethods[item.id] || 'N/A'}`} className="px-2 py-1" />
                         ) : (
                           <select
                             value={paymentMethods[item.id] || ''}
@@ -718,9 +717,7 @@ Thank you for your partnership with Ceylon Tea Factory
                               Disburse
                             </button>
                           ) : (
-                            <span className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-green-100 text-green-700">
-                              <CheckCircle2 size={12} /> Issued
-                            </span>
+                            <StatusBadge status="issued" className="rounded-lg px-3 py-1.5" />
                           )}
                           <button
                             onClick={() => handlePrint(item, 'advance')}
@@ -819,9 +816,7 @@ Thank you for your partnership with Ceylon Tea Factory
                               Disburse
                             </button>
                           ) : (
-                            <span className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-green-100 text-green-700">
-                              <CheckCircle2 size={12} /> Issued
-                            </span>
+                            <StatusBadge status="issued" className="rounded-lg px-3 py-1.5" />
                           )}
                           <button
                             onClick={() => handlePrint(item, 'fertilizer')}
@@ -920,9 +915,7 @@ Thank you for your partnership with Ceylon Tea Factory
                               Disburse
                             </button>
                           ) : (
-                            <span className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-green-100 text-green-700">
-                              <CheckCircle2 size={12} /> Issued
-                            </span>
+                            <StatusBadge status="issued" className="rounded-lg px-3 py-1.5" />
                           )}
                           <button
                             onClick={() => handlePrint(item, 'item')}

@@ -4,9 +4,11 @@ import Sidebar from './Sidebar'
 import Topbar from './Topbar'
 
 const pageTitles = {
-  '/':                'Dashboard',
   '/suppliers':       'Suppliers',
   '/requests':        'Requests',
+  '/dashboard':       'Dashboard',
+  '/disbursements':   'Disbursements',
+  '/disbursement-tracking': 'Disbursement Tracking',
   '/configurations':  'Configurations',
   '/communication':   'Communication',
   '/user-management': 'User Management',

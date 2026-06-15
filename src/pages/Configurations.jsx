@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Check, Flower2, Info, Package, Pencil, Plus, RefreshCw, Save, X } from 'lucide-react'
 import PageHeader from '../components/ui/PageHeader'
+import StatusBadge from '../components/ui/StatusBadge'
 import { fertilizerItemConfigurationsApi } from '../services/fertilizerItemConfigurationsApi'
 
 const configMeta = {
@@ -327,13 +328,7 @@ export default function Configurations() {
                           </div>
                         </td>
                         <td className="py-3 px-4">
-                          <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${
-                            item.isActive
-                              ? 'border border-green-200 bg-green-50 text-green-700 dark:border-green-900/50 dark:bg-green-900/15 dark:text-green-300'
-                              : 'border border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400'
-                          }`}>
-                            {item.status || (item.isActive ? 'active' : 'inactive')}
-                          </span>
+                          <StatusBadge status={item.status || (item.isActive ? 'active' : 'inactive')} />
                         </td>
                         <td className="py-3 px-4 text-right">
                           <div className="inline-flex items-center gap-2">

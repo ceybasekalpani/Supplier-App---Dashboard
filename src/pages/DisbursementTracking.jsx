@@ -10,9 +10,9 @@ import {
   RefreshCw,
   Search,
   Sprout,
-  Timer,
   X,
 } from 'lucide-react'
+import StatusBadge from '../components/ui/StatusBadge'
 import { disbursementApi } from '../services/disbursementApi'
 
 const typeStyles = {
@@ -251,16 +251,8 @@ function TrackingDetailsModal({ item, onClose }) {
 
           <div className="mt-4 rounded-lg border border-slate-200 px-3 py-3 dark:border-slate-700">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Current Status</p>
-            <div className="mt-2">
-              {item.currentStatus === 'completed' ? (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-700 dark:bg-green-900/30 dark:text-green-300">
-                  <CheckCircle2 size={12} /> Completed
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-100 px-2.5 py-1 text-xs font-semibold text-orange-700 dark:bg-orange-900/30 dark:text-orange-300">
-                  <Timer size={12} /> Awaiting
-                </span>
-              )}
+          <div className="mt-2">
+              <StatusBadge status={item.currentStatus === 'completed' ? 'completed' : 'awaiting'} className="px-2.5 py-1" />
             </div>
           </div>
         </div>
@@ -527,15 +519,7 @@ export default function DisbursementTracking() {
                       <td className="py-3 px-4 text-slate-600 dark:text-slate-300">{formatDisplayDate(item.issueDate)}</td>
                       <td className="py-3 px-4 text-slate-600 dark:text-slate-300">{item.method}</td>
                       <td className="py-3 px-4">
-                        {item.currentStatus === 'completed' ? (
-                          <span className="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-700 dark:bg-green-900/30 dark:text-green-300">
-                            <CheckCircle2 size={12} /> Completed
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-100 px-2.5 py-1 text-xs font-semibold text-orange-700 dark:bg-orange-900/30 dark:text-orange-300">
-                            <Timer size={12} /> Awaiting
-                          </span>
-                        )}
+                        <StatusBadge status={item.currentStatus === 'completed' ? 'completed' : 'awaiting'} className="px-2.5 py-1" />
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex flex-wrap gap-2">

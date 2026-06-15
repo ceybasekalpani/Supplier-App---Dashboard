@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { 
   Save, RotateCcw, Users, ShieldCheck, Key, LayoutDashboard, 
   Truck, FileText, Settings as SettingsIcon, MessageSquare, 
@@ -22,6 +23,8 @@ const moduleIconMap = {
 const emptyPermissions = { modulePermissions: {}, subPermissions: {} }
 
 const Settings = () => {
+  const [searchParams] = useSearchParams();
+  const requestedUserId = Number(searchParams.get('userId') || 0);
   const [users, setUsers] = useState([]);
   const [modules, setModules] = useState([]);
   const [userPermissions, setUserPermissions] = useState({});
@@ -46,7 +49,7 @@ const Settings = () => {
         setModules(result.modules);
         setUserPermissions(result.userPermissions);
 
-        const firstUser = result.users[0] || null;
+        const firstUser = result.users.find(user => user.id === requestedUserId) || result.users[0] || null;
         setSelectedUser(firstUser);
 
         const firstPermissions = firstUser ? result.userPermissions[firstUser.id] || emptyPermissions : emptyPermissions;
@@ -68,7 +71,7 @@ const Settings = () => {
     return () => {
       controller.abort();
     };
-  }, [refreshKey]);
+  }, [refreshKey, requestedUserId]);
 
   const subPermissionsByModule = useMemo(() => (
     modules.reduce((acc, module) => {

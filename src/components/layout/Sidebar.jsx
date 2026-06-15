@@ -4,20 +4,25 @@ import {
   MessageCircle, UserCheck, SlidersHorizontal,
   Leaf, ChevronLeft, ChevronRight, Send, CheckCircle
 } from 'lucide-react'
+import { adminAuthStorage } from '../../services/adminApiClient'
+import { hasAdminPermission, PERMISSIONS } from '../../services/adminPermissions'
 
 const navItems = [
-  { to: '/',               label: 'Dashboard',       icon: LayoutDashboard },
-  { to: '/suppliers',      label: 'Suppliers',       icon: Users           },
-  { to: '/requests',       label: 'Requests',        icon: FileText },
-  { to: '/disbursements',  label: 'Disbursements',   icon: Send },  
-  { to: '/disbursement-tracking', label: 'Disbursement Tracking', icon: CheckCircle },
-  { to: '/configurations', label: 'Configurations',  icon: Settings2       },
-  { to: '/communication',  label: 'Communication',   icon: MessageCircle   },
-  { to: '/user-management',label: 'User Management', icon: UserCheck       },
-  { to: '/settings',       label: 'Permission Management', icon: SlidersHorizontal},
+  { to: '/dashboard',      label: 'Dashboard',       icon: LayoutDashboard, permission: PERMISSIONS.dashboard },
+  { to: '/suppliers',      label: 'Suppliers',       icon: Users, permission: PERMISSIONS.suppliers },
+  { to: '/requests',       label: 'Requests',        icon: FileText, permission: PERMISSIONS.requests },
+  { to: '/disbursements',  label: 'Disbursements',   icon: Send, permission: PERMISSIONS.disbursements },
+  { to: '/disbursement-tracking', label: 'Disbursement Tracking', icon: CheckCircle, permission: PERMISSIONS.disbursementTracking },
+  { to: '/configurations', label: 'Configurations',  icon: Settings2, permission: PERMISSIONS.configurations },
+  { to: '/communication',  label: 'Communication',   icon: MessageCircle, permission: PERMISSIONS.communication },
+  { to: '/user-management',label: 'User Management', icon: UserCheck, permission: PERMISSIONS.userManagement },
+  { to: '/settings',       label: 'Permission Management', icon: SlidersHorizontal, permission: PERMISSIONS.permissions },
 ]
 
 export default function Sidebar({ collapsed, onToggle }) {
+  const currentAdmin = adminAuthStorage.getUser()
+  const visibleNavItems = navItems.filter(item => hasAdminPermission(currentAdmin, item.permission))
+
   return (
     <aside
       className={`fixed top-0 left-0 bottom-0 z-50 flex flex-col border-r transition-all duration-300 ${collapsed ? 'w-[60px]' : 'w-[240px]'}`}
@@ -39,7 +44,7 @@ export default function Sidebar({ collapsed, onToggle }) {
 
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
-        {navItems.map(({ to, label, icon: Icon, badge }) => (
+        {visibleNavItems.map(({ to, label, icon: Icon, badge }) => (
           <NavLink
             key={to}
             to={to}

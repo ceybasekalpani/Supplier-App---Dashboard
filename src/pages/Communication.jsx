@@ -15,7 +15,8 @@ import {
   X,
 } from 'lucide-react'
 import PageHeader from '../components/ui/PageHeader'
-import StatusBadge from '../components/ui/StatusBadge'
+import StatusBadge, { getStatusPalette } from '../components/ui/StatusBadge'
+import { useTheme } from '../context/useTheme'
 import Toggle from '../components/ui/Toggle'
 import { communicationsApi } from '../services/communicationsApi'
 
@@ -26,13 +27,6 @@ const tabs = [
 
 const newsFilters = ['all', 'active', 'draft', 'expired']
 const notificationFilters = ['all', 'scheduled', 'delivered', 'failed']
-
-const statusTone = {
-  draft: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-900/40',
-  expired: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-300 dark:border-red-900/40',
-  failed: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-300 dark:border-red-900/40',
-  all: 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-900 dark:text-slate-300 dark:border-slate-700',
-}
 
 const themedPrimary = {
   backgroundColor: 'var(--theme-primary)',
@@ -78,16 +72,25 @@ function countStatus(items, status) {
 
 function FilterButton({ filter, activeFilter, count, onClick }) {
   const isActive = filter === activeFilter
-  const themedStatuses = ['active', 'scheduled', 'delivered']
+  const { dark } = useTheme()
+  const palette = filter === 'all'
+    ? dark
+      ? { background: '#1E293B', border: '#475569', text: '#CBD5E1' }
+      : { background: '#F1F5F9', border: '#CBD5E1', text: '#475569' }
+    : getStatusPalette(filter, dark)
 
   return (
     <button
       type="button"
       onClick={onClick}
       className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold capitalize transition-colors ${
-        isActive && !themedStatuses.includes(filter) ? statusTone[filter] : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700'
+        isActive ? '' : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700'
       }`}
-      style={isActive && themedStatuses.includes(filter) ? themedPrimarySoft : undefined}
+      style={isActive ? {
+        backgroundColor: palette.background,
+        borderColor: palette.border,
+        color: palette.text,
+      } : undefined}
     >
       {filter}
       <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${isActive ? 'bg-white/50 dark:bg-slate-900/30' : 'bg-slate-100 dark:bg-slate-900'}`}>
@@ -106,19 +109,6 @@ function EmptyState({ icon: Icon, title, description }) {
       <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{title}</p>
       <p className="mt-1 text-xs text-slate-400">{description}</p>
     </div>
-  )
-}
-
-function NotificationStatus({ status }) {
-  const usePrimary = status === 'scheduled' || status === 'delivered'
-
-  return (
-    <span
-      className={`inline-flex rounded-full border px-2 py-1 text-xs font-semibold capitalize ${usePrimary ? '' : statusTone[status] || statusTone.all}`}
-      style={usePrimary ? themedPrimarySoft : undefined}
-    >
-      {status}
-    </span>
   )
 }
 
@@ -530,7 +520,7 @@ export default function Communication() {
                         <td className="max-w-80 px-4 py-3 text-xs text-slate-500 dark:text-slate-400">
                           <span className="line-clamp-2">{item.message}</span>
                         </td>
-                        <td className="px-4 py-3"><NotificationStatus status={item.status} /></td>
+                        <td className="px-4 py-3"><StatusBadge status={item.status} className="px-2 py-1" /></td>
                         <td className="px-4 py-3 text-xs text-slate-400">{item.scheduledFor || item.sentAt || 'Immediate'}</td>
                         <td className="px-4 py-3">
                           <div className="flex justify-end gap-2">
