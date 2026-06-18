@@ -40,19 +40,19 @@ const validFilters = ['all', 'pending', 'approved', 'rejected']
 const tabActiveClass = {
   advance: 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 shadow-sm',
   fertilizer: 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 shadow-sm',
-  items: 'bg-sky-50 dark:bg-sky-900/20 text-sky-700 dark:text-sky-300 shadow-sm',
+  items: 'bg-teal-50 dark:bg-teal-900/20 text-teal-700 dark:text-teal-300 shadow-sm',
 }
 
 const filterActiveClass = {
   advance: 'bg-amber-50 text-amber-700 border-amber-300',
   fertilizer: 'bg-green-50 text-green-700 border-green-300',
-  items: 'bg-sky-50 text-sky-700 border-sky-300',
+  items: 'bg-teal-50 text-teal-700 border-teal-300',
 }
 
 const selectedRowClass = {
   advance: 'bg-amber-50 dark:bg-amber-900/10',
   fertilizer: 'bg-green-50 dark:bg-green-900/10',
-  items: 'bg-sky-50 dark:bg-sky-900/10',
+  items: 'bg-teal-50 dark:bg-teal-900/10',
 }
 
 function normalizeTab(value) {
@@ -457,7 +457,7 @@ function SupplierWindow({ regNo, tab, requestsByType, onClose }) {
     >
       <div className="w-full max-w-7xl overflow-hidden rounded-lg bg-white shadow-[0_24px_90px_rgba(15,23,42,0.35)] ring-1 ring-slate-200 dark:bg-slate-950 dark:ring-slate-800">
         <header className="relative border-b border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-          <div className="absolute inset-x-0 top-0 h-1 bg-linear-to-r from-emerald-500 via-amber-400 to-sky-500" />
+          <div className="absolute inset-x-0 top-0 h-1 bg-linear-to-r from-emerald-500 via-lime-400 to-green-700" />
 
           <div className="flex items-center justify-between gap-4 px-6 py-5">
             <div className="flex min-w-0 items-center gap-4">
@@ -546,7 +546,7 @@ function SupplierWindow({ regNo, tab, requestsByType, onClose }) {
               {showBank && (
                 <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                   <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-400">
-                    <Landmark size={15} className="text-sky-600" />
+                    <Landmark size={15} className="text-teal-600" />
                     Bank profile
                   </div>
 
@@ -647,7 +647,7 @@ function SupplierWindow({ regNo, tab, requestsByType, onClose }) {
                       {[
                         ['Advance', requestCounts.advance, 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300'],
                         ['Fertilizer', requestCounts.fertilizer, 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300'],
-                        ['Items', requestCounts.items, 'bg-sky-50 text-sky-700 dark:bg-sky-900/20 dark:text-sky-300'],
+                        ['Items', requestCounts.items, 'bg-teal-50 text-teal-700 dark:bg-teal-900/20 dark:text-teal-300'],
                       ].map(([label, value, tone]) => (
                         <div key={label} className={`rounded-md px-2 py-1.5 text-center ${tone}`}>
                           <p className="text-base font-bold">{value}</p>

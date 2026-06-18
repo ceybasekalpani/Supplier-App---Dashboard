@@ -19,6 +19,7 @@ import StatusBadge, { getStatusPalette } from '../components/ui/StatusBadge'
 import { useTheme } from '../context/useTheme'
 import Toggle from '../components/ui/Toggle'
 import { communicationsApi } from '../services/communicationsApi'
+import Combobox from '../components/ui/Combobox'
 
 const tabs = [
   { id: 'news', label: 'News', icon: Newspaper },
@@ -660,16 +661,13 @@ export default function Communication() {
                   </div>
                   <div>
                     <label className="mb-1.5 block text-xs font-semibold uppercase text-slate-500">Audience</label>
-                    <select
+                    <Combobox
                       value={newsForm.audienceType}
-                      onChange={event => setNewsForm({ ...newsForm, audienceType: event.target.value, targetRegNo: event.target.value === 'SpecificSupplier' ? newsForm.targetRegNo : '' })}
-                      className="w-full rounded-lg border bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition-colors focus:ring-2 dark:bg-slate-900 dark:text-slate-300"
+                      onChange={value => setNewsForm({ ...newsForm, audienceType: value, targetRegNo: value === 'SpecificSupplier' ? newsForm.targetRegNo : '' })}
+                      options={audienceOptions}
+                      buttonClassName="py-2.5 dark:bg-slate-900"
                       style={themedInput}
-                    >
-                      {audienceOptions.map(option => (
-                        <option key={option.value} value={option.value}>{option.label}</option>
-                      ))}
-                    </select>
+                    />
                   </div>
                   {newsForm.audienceType === 'SpecificSupplier' && (
                     <div>
@@ -750,29 +748,23 @@ export default function Communication() {
                   </div>
                   <div>
                     <label className="mb-1.5 block text-xs font-semibold uppercase text-slate-500">Notification Type</label>
-                    <select
+                    <Combobox
                       value={notifForm.type}
-                      onChange={event => setNotifForm({ ...notifForm, type: event.target.value })}
-                      className="w-full rounded-lg border bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition-colors focus:ring-2 dark:bg-slate-900 dark:text-slate-300"
+                      onChange={value => setNotifForm({ ...notifForm, type: value })}
+                      options={notificationTypeOptions}
+                      buttonClassName="py-2.5 dark:bg-slate-900"
                       style={themedInput}
-                    >
-                      {notificationTypeOptions.map(option => (
-                        <option key={option.value} value={option.value}>{option.label}</option>
-                      ))}
-                    </select>
+                    />
                   </div>
                   <div>
                     <label className="mb-1.5 block text-xs font-semibold uppercase text-slate-500">Audience</label>
-                    <select
+                    <Combobox
                       value={notifForm.audienceType}
-                      onChange={event => setNotifForm({ ...notifForm, audienceType: event.target.value, targetRegNo: event.target.value === 'SpecificSupplier' ? notifForm.targetRegNo : '' })}
-                      className="w-full rounded-lg border bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition-colors focus:ring-2 dark:bg-slate-900 dark:text-slate-300"
+                      onChange={value => setNotifForm({ ...notifForm, audienceType: value, targetRegNo: value === 'SpecificSupplier' ? notifForm.targetRegNo : '' })}
+                      options={audienceOptions}
+                      buttonClassName="py-2.5 dark:bg-slate-900"
                       style={themedInput}
-                    >
-                      {audienceOptions.map(option => (
-                        <option key={option.value} value={option.value}>{option.label}</option>
-                      ))}
-                    </select>
+                    />
                   </div>
                   {notifForm.audienceType === 'SpecificSupplier' && (
                     <div>

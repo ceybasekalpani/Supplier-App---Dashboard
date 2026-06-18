@@ -17,7 +17,7 @@ import { formatCurrency, formatDisplayDate, formatQuantity } from '../utils/form
 const REQUEST_TYPES = [
   { id: 'advance', label: 'Advance', icon: Droplet, tone: 'amber' },
   { id: 'fertilizer', label: 'Fertilizer', icon: Package, tone: 'green' },
-  { id: 'item', label: 'Items', icon: ShoppingBag, tone: 'blue' },
+  { id: 'item', label: 'Items', icon: ShoppingBag, tone: 'teal' },
 ]
 
 const REQUEST_COLLECTION = {
@@ -61,7 +61,7 @@ const SummaryPill = ({ label, value, tone }) => {
   const styles = {
     amber: 'bg-amber-50 text-amber-700 border-amber-200',
     green: 'bg-green-50 text-green-700 border-green-200',
-    blue: 'bg-sky-50 text-sky-700 border-sky-200',
+    teal: 'bg-teal-50 text-teal-700 border-teal-200',
   }
 
   return (
@@ -177,7 +177,7 @@ export default function Suppliers() {
       <div className="grid gap-3 md:grid-cols-3">
         <SummaryPill label="Suppliers" value={suppliers.length} tone="green" />
         <SummaryPill label="Recent Requests" value={totalRequests} tone="amber" />
-        <SummaryPill label="Request Period" value={`${monthLabel(period.previousMonth)} - ${monthLabel(period.activeMonth)}`} tone="blue" />
+        <SummaryPill label="Request Period" value={`${monthLabel(period.previousMonth)} - ${monthLabel(period.activeMonth)}`} tone="teal" />
       </div>
 
       {(warning || error) && (
@@ -311,7 +311,7 @@ export default function Suppliers() {
                 <div className="mt-4 grid grid-cols-3 gap-2">
                   <SummaryPill label="Advance" value={counts.advance} tone="amber" />
                   <SummaryPill label="Fertilizer" value={counts.fertilizer} tone="green" />
-                  <SummaryPill label="Items" value={counts.item} tone="blue" />
+                  <SummaryPill label="Items" value={counts.item} tone="teal" />
                 </div>
 
                

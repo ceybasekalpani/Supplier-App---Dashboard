@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import Combobox from '../ui/Combobox'
 import StatusBadge from '../ui/StatusBadge'
 
 export default function RecentActivityTable({ activities }) {
@@ -23,6 +24,15 @@ export default function RecentActivityTable({ activities }) {
     return matchesType && matchesStatus
   })
 
+  const typeFilterOptions = [
+    { value: 'all', label: 'All types' },
+    ...typeOptions.map(type => ({ value: type, label: type })),
+  ]
+  const statusFilterOptions = [
+    { value: 'all', label: 'All status' },
+    ...statusOptions.map(status => ({ value: status, label: status })),
+  ]
+
   return (
     <section className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm overflow-hidden">
       <div className="flex flex-col gap-3 p-5 border-b border-slate-100 dark:border-slate-700 lg:flex-row lg:items-center lg:justify-between">
@@ -32,27 +42,21 @@ export default function RecentActivityTable({ activities }) {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <select
+          <Combobox
             value={typeFilter}
-            onChange={event => setTypeFilter(event.target.value)}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold capitalize text-slate-600 outline-none transition-colors focus:border-emerald-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
-          >
-            <option value="all">All types</option>
-            {typeOptions.map(type => (
-              <option key={type} value={type}>{type}</option>
-            ))}
-          </select>
+            onChange={setTypeFilter}
+            options={typeFilterOptions}
+            className="min-w-32"
+            buttonClassName="px-3 py-2 text-xs font-semibold dark:border-slate-700 dark:bg-slate-900"
+          />
 
-          <select
+          <Combobox
             value={statusFilter}
-            onChange={event => setStatusFilter(event.target.value)}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold capitalize text-slate-600 outline-none transition-colors focus:border-emerald-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
-          >
-            <option value="all">All status</option>
-            {statusOptions.map(status => (
-              <option key={status} value={status}>{status}</option>
-            ))}
-          </select>
+            onChange={setStatusFilter}
+            options={statusFilterOptions}
+            className="min-w-32"
+            buttonClassName="px-3 py-2 text-xs font-semibold dark:border-slate-700 dark:bg-slate-900"
+          />
         </div>
       </div>
 

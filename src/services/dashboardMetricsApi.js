@@ -12,7 +12,7 @@ const normalizeTone = (tone, key = '') => {
 
   if (normalized.includes('pending') || normalized.includes('amber')) return 'amber'
   if (normalized.includes('approved') || normalized.includes('emerald')) return 'green'
-  if (normalized.includes('leaf') || normalized.includes('sky')) return 'sky'
+  if (normalized.includes('leaf') || normalized.includes('sky') || normalized.includes('teal')) return 'teal'
   if (normalized.includes('supplier') || normalized.includes('green')) return 'green'
 
   return 'slate'

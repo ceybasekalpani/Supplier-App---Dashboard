@@ -2,11 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { 
   Printer, Download, Package, CheckCircle2,
   Banknote, Sprout, Send, Truck, 
-  ChevronDown, CheckCircle, AlertCircle,
+  CheckCircle, AlertCircle,
   Leaf, RefreshCw
 } from 'lucide-react'
 import { disbursementApi } from '../services/disbursementApi'
 import StatusBadge from '../components/ui/StatusBadge'
+import Combobox from '../components/ui/Combobox'
 import { downloadPdf } from '../utils/pdf'
 
 const formatDisplayDate = (date) => {
@@ -536,21 +537,16 @@ Thank you for your partnership with Ceylon Tea Factory
             <Truck size={18} className="text-slate-500" />
             <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Disbursement filters</span>
           </div>
-          <div className="relative">
-            <select
-              value={selectedRoute}
-              onChange={(e) => {
-                setQueueLoading(true)
-                setSelectedRoute(e.target.value)
-              }}
-              className="appearance-none bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-4 py-2 pr-8 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-green-600 cursor-pointer"
-            >
-              {routeOptions.map(route => (
-                <option key={route.id} value={route.id}>{route.name}</option>
-              ))}
-            </select>
-            <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-          </div>
+          <Combobox
+            value={selectedRoute}
+            onChange={(value) => {
+              setQueueLoading(true)
+              setSelectedRoute(value)
+            }}
+            options={routeOptions.map(route => ({ value: route.id, label: route.name }))}
+            className="min-w-48"
+            buttonClassName="bg-slate-50 px-4 py-2 text-sm dark:bg-slate-700"
+          />
           <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
             From
             <input
@@ -689,16 +685,18 @@ Thank you for your partnership with Ceylon Tea Factory
                         {item.issued ? (
                           <StatusBadge status={`issued via ${item.paymentMethod || paymentMethods[item.id] || 'N/A'}`} className="px-2 py-1" />
                         ) : (
-                          <select
+                          <Combobox
                             value={paymentMethods[item.id] || ''}
-                            onChange={(e) => updatePaymentMethod(item.id, e.target.value)}
-                            className="bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-600 cursor-pointer"
-                          >
-                            <option value="">Select Method</option>
-                            <option value="Cash">💵 Cash</option>
-                            <option value="Bank Transfer">🏦 Bank Transfer</option>
-                            <option value="Cheque">📝 Cheque</option>
-                          </select>
+                            onChange={(value) => updatePaymentMethod(item.id, value)}
+                            options={[
+                              { value: '', label: 'Select Method' },
+                              { value: 'Cash', label: 'Cash' },
+                              { value: 'Bank Transfer', label: 'Bank Transfer' },
+                              { value: 'Cheque', label: 'Cheque' },
+                            ]}
+                            className="min-w-44"
+                            buttonClassName="bg-slate-50 py-1.5 text-sm dark:bg-slate-700"
+                          />
                         )}
                       </td>
                       <td className="py-3 px-4">

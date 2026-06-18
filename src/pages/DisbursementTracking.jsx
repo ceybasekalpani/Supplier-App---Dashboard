@@ -13,6 +13,7 @@ import {
   X,
 } from 'lucide-react'
 import StatusBadge from '../components/ui/StatusBadge'
+import Combobox from '../components/ui/Combobox'
 import { disbursementApi } from '../services/disbursementApi'
 
 const typeStyles = {
@@ -409,31 +410,35 @@ export default function DisbursementTracking() {
               className="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 pl-9 pr-3 py-2 text-sm text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-green-600"
             />
           </div>
-          <select
+          <Combobox
             value={typeFilter}
-            onChange={(e) => {
+            onChange={(value) => {
               setTrackingLoading(true)
-              setTypeFilter(e.target.value)
+              setTypeFilter(value)
             }}
-            className="rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-green-600"
-          >
-            <option value="all">All Types</option>
-            <option value="advance">Advance</option>
-            <option value="fertilizer">Fertilizer</option>
-            <option value="items">Items</option>
-          </select>
-          <select
+            options={[
+              { value: 'all', label: 'All Types' },
+              { value: 'advance', label: 'Advance' },
+              { value: 'fertilizer', label: 'Fertilizer' },
+              { value: 'items', label: 'Items' },
+            ]}
+            className="min-w-36"
+            buttonClassName="bg-slate-50 dark:bg-slate-700"
+          />
+          <Combobox
             value={statusFilter}
-            onChange={(e) => {
+            onChange={(value) => {
               setTrackingLoading(true)
-              setStatusFilter(e.target.value)
+              setStatusFilter(value)
             }}
-            className="rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-green-600"
-          >
-            <option value="all">All Status</option>
-            <option value="awaiting">Awaiting</option>
-            <option value="completed">Completed</option>
-          </select>
+            options={[
+              { value: 'all', label: 'All Status' },
+              { value: 'awaiting', label: 'Awaiting' },
+              { value: 'completed', label: 'Completed' },
+            ]}
+            className="min-w-36"
+            buttonClassName="bg-slate-50 dark:bg-slate-700"
+          />
           <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
             From
             <input

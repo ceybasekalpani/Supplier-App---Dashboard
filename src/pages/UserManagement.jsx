@@ -3,6 +3,7 @@ import { useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Pencil, Trash2, Camera, X, Search, RefreshCw, Eye, EyeOff, KeyRound, ShieldCheck } from 'lucide-react';
 import Avatar from '../components/ui/Avatar';
+import Combobox from '../components/ui/Combobox';
 import FormInput from '../components/ui/FormInput';
 import StatusBadge from '../components/ui/StatusBadge';
 import { sanitizeText, validateUserForm } from '../utils/validation';
@@ -199,11 +200,17 @@ const UserManagement = () => {
                 <input type="text" placeholder="Search by name, email or username..." value={searchTerm} onChange={(e) => { setLoading(true); setSearchTerm(e.target.value); }} className="pl-9 pr-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-white w-64 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500" />
               </div>
               <div className="flex gap-2">
-                <select value={statusFilter} onChange={(e) => { setLoading(true); setStatusFilter(e.target.value); }} className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-white">
-                  <option value="all">All Status</option>
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                </select>
+                <Combobox
+                  value={statusFilter}
+                  onChange={(value) => { setLoading(true); setStatusFilter(value); }}
+                  options={[
+                    { value: 'all', label: 'All Status' },
+                    { value: 'active', label: 'Active' },
+                    { value: 'inactive', label: 'Inactive' },
+                  ]}
+                  className="min-w-36"
+                  buttonClassName="border-slate-300 bg-white py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-white"
+                />
               </div>
             </div>
             <div className="overflow-x-auto">
@@ -337,10 +344,15 @@ const UserManagement = () => {
               <div>
                 <div>
                   <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Status</label>
-                  <select value={formData.status} onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value }))} className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500/20">
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                  </select>
+                  <Combobox
+                    value={formData.status}
+                    onChange={(value) => setFormData(prev => ({ ...prev, status: value }))}
+                    options={[
+                      { value: 'active', label: 'Active' },
+                      { value: 'inactive', label: 'Inactive' },
+                    ]}
+                    buttonClassName="border-slate-300 bg-white py-2 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-white"
+                  />
                 </div>
               </div>
             </div>

@@ -15,9 +15,9 @@ const CARD_STYLES = {
   },
   items: {
     icon: Package,
-    accent: 'bg-sky-50 text-sky-700 dark:bg-sky-900/20 dark:text-sky-300',
-    ring: 'border-sky-200 dark:border-sky-900/40',
-    header: 'text-sky-700 dark:text-sky-300',
+    accent: 'bg-teal-50 text-teal-700 dark:bg-teal-900/20 dark:text-teal-300',
+    ring: 'border-teal-200 dark:border-teal-900/40',
+    header: 'text-teal-700 dark:text-teal-300',
   },
 }
 
@@ -34,11 +34,11 @@ const KPI_STYLES = {
     ring: 'border-amber-200 dark:border-amber-900/40',
     header: 'text-amber-700 dark:text-amber-300',
   },
-  sky: {
+  teal: {
     icon: Leaf,
-    accent: 'bg-sky-50 text-sky-700 dark:bg-sky-900/20 dark:text-sky-300',
-    ring: 'border-sky-200 dark:border-sky-900/40',
-    header: 'text-sky-700 dark:text-sky-300',
+    accent: 'bg-teal-50 text-teal-700 dark:bg-teal-900/20 dark:text-teal-300',
+    ring: 'border-teal-200 dark:border-teal-900/40',
+    header: 'text-teal-700 dark:text-teal-300',
   },
   slate: {
     icon: CheckCircle2,

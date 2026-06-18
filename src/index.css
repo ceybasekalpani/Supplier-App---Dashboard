@@ -93,15 +93,17 @@
   }
 
   option:checked {
-    background-color: color-mix(in srgb, var(--theme-primary) 16%, var(--theme-card));
-    color: var(--theme-primaryDark);
+    background-color: var(--theme-primary) !important;
+    background-image: linear-gradient(var(--theme-primary), var(--theme-primary)) !important;
+    color: var(--theme-white) !important;
   }
 
   option:hover,
   option:focus,
   option:active {
-    background-color: color-mix(in srgb, var(--theme-primary) 18%, var(--theme-card)) !important;
-    color: var(--theme-text) !important;
+    background-color: var(--theme-primaryLight) !important;
+    background-image: linear-gradient(var(--theme-primaryLight), var(--theme-primaryLight)) !important;
+    color: var(--theme-white) !important;
   }
 
   .dark select {
