@@ -70,7 +70,17 @@ export async function adminApiRequest(path, options = {}) {
   const data = await parseResponseBody(response)
 
   if (!response.ok) {
+    const validationMessages = data?.errors
+      ? Object.entries(data.errors)
+          .flatMap(([field, messages]) => (
+            Array.isArray(messages)
+              ? messages.map(message => `${field}: ${message}`)
+              : [`${field}: ${messages}`]
+          ))
+      : []
+
     const message =
+      validationMessages[0] ||
       data?.message ||
       data?.title ||
       data?.error ||

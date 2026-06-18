@@ -25,6 +25,19 @@ const tabs = [
   { id: 'notifications', label: 'Notifications', icon: Bell },
 ]
 
+const audienceOptions = [
+  { value: 'AllSuppliers', label: 'All suppliers' },
+  { value: 'SpecificSupplier', label: 'Specific supplier' },
+]
+
+const notificationTypeOptions = [
+  { value: 'General', label: 'General' },
+  { value: 'News', label: 'News' },
+  { value: 'Request', label: 'Request' },
+  { value: 'Fertilizer', label: 'Fertilizer' },
+  { value: 'Item', label: 'Item' },
+]
+
 const newsFilters = ['all', 'active', 'draft', 'expired']
 const notificationFilters = ['all', 'scheduled', 'delivered', 'failed']
 
@@ -69,6 +82,8 @@ function getCurrentDateTime() {
 function countStatus(items, status) {
   return status === 'all' ? items.length : items.filter(item => item.status === status).length
 }
+
+const isValidRegNo = value => /^\d+$/.test(String(value || '').trim())
 
 function FilterButton({ filter, activeFilter, count, onClick }) {
   const isActive = filter === activeFilter
@@ -119,8 +134,8 @@ export default function Communication() {
   const [active, setActive] = useState(true)
   const [newsItems, setNewsItems] = useState([])
   const [notifications, setNotifications] = useState([])
-  const [newsForm, setNewsForm] = useState({ title: '', description: '', expiryDate: '' })
-  const [notifForm, setNotifForm] = useState({ title: '', message: '', schedule: '' })
+  const [newsForm, setNewsForm] = useState({ title: '', description: '', expiryDate: '', audienceType: 'AllSuppliers', targetRegNo: '' })
+  const [notifForm, setNotifForm] = useState({ title: '', message: '', schedule: '', type: 'General', audienceType: 'AllSuppliers', targetRegNo: '' })
   const [editingNews, setEditingNews] = useState(null)
   const [editingNotif, setEditingNotif] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -165,8 +180,8 @@ export default function Communication() {
   const handleDiscard = () => {
     setEditingNews(null)
     setEditingNotif(null)
-    setNewsForm({ title: '', description: '', expiryDate: '' })
-    setNotifForm({ title: '', message: '', schedule: '' })
+    setNewsForm({ title: '', description: '', expiryDate: '', audienceType: 'AllSuppliers', targetRegNo: '' })
+    setNotifForm({ title: '', message: '', schedule: '', type: 'General', audienceType: 'AllSuppliers', targetRegNo: '' })
     setActive(true)
   }
 
@@ -178,6 +193,12 @@ export default function Communication() {
   const refreshCommunications = () => {
     setLoading(true)
     setRefreshKey(current => current + 1)
+  }
+
+  const reloadCommunications = async () => {
+    const result = await communicationsApi.getAll()
+    setNewsItems(result.news)
+    setNotifications(result.notifications)
   }
 
   const handleCreateNews = async () => {
@@ -193,15 +214,19 @@ export default function Communication() {
       return
     }
 
+    if (newsForm.audienceType === 'SpecificSupplier' && !isValidRegNo(newsForm.targetRegNo)) {
+      showToast('A valid numeric supplier registration number is required.', 'error')
+      return
+    }
+
     setSaving(true)
 
     try {
-      const newNews = await communicationsApi.createNews({ ...newsForm, active })
-
-      setNewsItems(prev => [newNews, ...prev])
-      setNewsForm({ title: '', description: '', expiryDate: '' })
+      await communicationsApi.createNews({ ...newsForm, active })
+      await reloadCommunications()
+      setNewsForm({ title: '', description: '', expiryDate: '', audienceType: 'AllSuppliers', targetRegNo: '' })
       setActive(true)
-      showToast('News created successfully.')
+      showToast(active ? 'News published successfully.' : 'News saved as draft.')
     } catch (error) {
       showToast(error.message || 'Unable to create news.', 'error')
     } finally {
@@ -220,6 +245,8 @@ export default function Communication() {
       title: news.title,
       description: news.description,
       expiryDate: news.expiry !== 'No expiry' ? news.expiry : '',
+      audienceType: news.audienceType || 'AllSuppliers',
+      targetRegNo: news.targetRegNo || '',
     })
     setActive(news.status === 'active')
   }
@@ -237,14 +264,16 @@ export default function Communication() {
       return
     }
 
+    if (newsForm.audienceType === 'SpecificSupplier' && !isValidRegNo(newsForm.targetRegNo)) {
+      showToast('A valid numeric supplier registration number is required.', 'error')
+      return
+    }
+
     setSaving(true)
 
     try {
-      const updatedNews = await communicationsApi.updateNews(editingNews.id, { ...newsForm, active })
-
-      setNewsItems(prev => prev.map(item =>
-        item.id === editingNews.id ? updatedNews : item
-      ))
+      await communicationsApi.updateNews(editingNews.id, { ...newsForm, active })
+      await reloadCommunications()
 
       handleDiscard()
       showToast('News updated successfully.')
@@ -292,13 +321,17 @@ export default function Communication() {
       }
     }
 
+    if (notifForm.audienceType === 'SpecificSupplier' && !isValidRegNo(notifForm.targetRegNo)) {
+      showToast('A valid numeric supplier registration number is required.', 'error')
+      return
+    }
+
     setSaving(true)
 
     try {
-      const newNotif = await communicationsApi.createNotification(notifForm)
-
-      setNotifications(prev => [newNotif, ...prev])
-      setNotifForm({ title: '', message: '', schedule: '' })
+      await communicationsApi.createNotification(notifForm)
+      await reloadCommunications()
+      setNotifForm({ title: '', message: '', schedule: '', type: 'General', audienceType: 'AllSuppliers', targetRegNo: '' })
       showToast(notifForm.schedule ? 'Notification scheduled successfully.' : 'Notification sent successfully.')
     } catch (error) {
       showToast(error.message || 'Unable to send notification.', 'error')
@@ -309,7 +342,14 @@ export default function Communication() {
 
   const handleEditNotif = (notif) => {
     setEditingNotif(notif)
-    setNotifForm({ title: notif.title, message: notif.message, schedule: notif.scheduledFor ? String(notif.scheduledFor).slice(0, 16) : '' })
+    setNotifForm({
+      title: notif.title,
+      message: notif.message,
+      schedule: notif.scheduledFor ? String(notif.scheduledFor).slice(0, 16) : '',
+      type: notif.type || 'General',
+      audienceType: notif.audienceType || 'AllSuppliers',
+      targetRegNo: notif.targetRegNo || '',
+    })
   }
 
   const handleUpdateNotif = async () => {
@@ -320,14 +360,16 @@ export default function Communication() {
       return
     }
 
+    if (notifForm.audienceType === 'SpecificSupplier' && !isValidRegNo(notifForm.targetRegNo)) {
+      showToast('A valid numeric supplier registration number is required.', 'error')
+      return
+    }
+
     setSaving(true)
 
     try {
-      const updatedNotif = await communicationsApi.updateNotification(editingNotif.id, notifForm)
-
-      setNotifications(prev => prev.map(item =>
-        item.id === editingNotif.id ? updatedNotif : item
-      ))
+      await communicationsApi.updateNotification(editingNotif.id, notifForm)
+      await reloadCommunications()
 
       handleDiscard()
       showToast('Notification updated successfully.')
@@ -458,7 +500,12 @@ export default function Communication() {
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                     {filteredNews.map(item => (
                       <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
-                        <td className="px-4 py-3 font-semibold text-slate-800 dark:text-slate-200">{item.title}</td>
+                        <td className="px-4 py-3">
+                          <p className="font-semibold text-slate-800 dark:text-slate-200">{item.title}</p>
+                          <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                            {item.audienceType === 'SpecificSupplier' ? `Supplier ${item.targetRegNo || '-'}` : 'All suppliers'}
+                          </p>
+                        </td>
                         <td className="max-w-72 px-4 py-3 text-xs text-slate-500 dark:text-slate-400">
                           <span className="line-clamp-2">{item.description}</span>
                         </td>
@@ -516,7 +563,12 @@ export default function Communication() {
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                     {filteredNotifications.map(item => (
                       <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
-                        <td className="px-4 py-3 font-semibold text-slate-800 dark:text-slate-200">{item.title}</td>
+                        <td className="px-4 py-3">
+                          <p className="font-semibold text-slate-800 dark:text-slate-200">{item.title}</p>
+                          <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                            {item.type || 'General'} / {item.audienceType === 'SpecificSupplier' ? `Supplier ${item.targetRegNo || '-'}` : 'All suppliers'}
+                          </p>
+                        </td>
                         <td className="max-w-80 px-4 py-3 text-xs text-slate-500 dark:text-slate-400">
                           <span className="line-clamp-2">{item.message}</span>
                         </td>
@@ -606,7 +658,34 @@ export default function Communication() {
                       />
                     </div>
                   </div>
-                  <Toggle checked={active} onChange={event => setActive(event.target.checked)} label="Active News" />
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold uppercase text-slate-500">Audience</label>
+                    <select
+                      value={newsForm.audienceType}
+                      onChange={event => setNewsForm({ ...newsForm, audienceType: event.target.value, targetRegNo: event.target.value === 'SpecificSupplier' ? newsForm.targetRegNo : '' })}
+                      className="w-full rounded-lg border bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition-colors focus:ring-2 dark:bg-slate-900 dark:text-slate-300"
+                      style={themedInput}
+                    >
+                      {audienceOptions.map(option => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  {newsForm.audienceType === 'SpecificSupplier' && (
+                    <div>
+                      <label className="mb-1.5 block text-xs font-semibold uppercase text-slate-500">Supplier Reg No</label>
+                      <input
+                        type="text"
+                        value={newsForm.targetRegNo}
+                        onChange={event => setNewsForm({ ...newsForm, targetRegNo: event.target.value })}
+                        inputMode="numeric"
+                        placeholder="Enter supplier registration number"
+                        className="w-full rounded-lg border bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition-colors focus:ring-2 dark:bg-slate-900 dark:text-slate-300"
+                        style={themedInput}
+                      />
+                    </div>
+                  )}
+                  <Toggle checked={active} onChange={event => setActive(event.target.checked)} label="Publish now" />
 
                   <div className="flex gap-3 pt-1">
                     <button
@@ -669,6 +748,46 @@ export default function Communication() {
                       style={themedInput}
                     />
                   </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold uppercase text-slate-500">Notification Type</label>
+                    <select
+                      value={notifForm.type}
+                      onChange={event => setNotifForm({ ...notifForm, type: event.target.value })}
+                      className="w-full rounded-lg border bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition-colors focus:ring-2 dark:bg-slate-900 dark:text-slate-300"
+                      style={themedInput}
+                    >
+                      {notificationTypeOptions.map(option => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold uppercase text-slate-500">Audience</label>
+                    <select
+                      value={notifForm.audienceType}
+                      onChange={event => setNotifForm({ ...notifForm, audienceType: event.target.value, targetRegNo: event.target.value === 'SpecificSupplier' ? notifForm.targetRegNo : '' })}
+                      className="w-full rounded-lg border bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition-colors focus:ring-2 dark:bg-slate-900 dark:text-slate-300"
+                      style={themedInput}
+                    >
+                      {audienceOptions.map(option => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  {notifForm.audienceType === 'SpecificSupplier' && (
+                    <div>
+                      <label className="mb-1.5 block text-xs font-semibold uppercase text-slate-500">Supplier Reg No</label>
+                      <input
+                        type="text"
+                        value={notifForm.targetRegNo}
+                        onChange={event => setNotifForm({ ...notifForm, targetRegNo: event.target.value })}
+                        inputMode="numeric"
+                        placeholder="Enter supplier registration number"
+                        className="w-full rounded-lg border bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition-colors focus:ring-2 dark:bg-slate-900 dark:text-slate-300"
+                        style={themedInput}
+                      />
+                    </div>
+                  )}
                   <div>
                     <label className="mb-1.5 block text-xs font-semibold uppercase text-slate-500">Schedule</label>
                     <div className="relative">

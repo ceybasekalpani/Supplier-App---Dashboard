@@ -29,6 +29,8 @@ const normalizeNews = (row) => {
     showPopup: Boolean(getValue(row, 'showPopup')),
     startDate: dateOnly(getValue(row, 'startDate')),
     endDate: dateOnly(getValue(row, 'endDate')),
+    audienceType: String(getValue(row, 'audienceType') || 'AllSuppliers'),
+    targetRegNo: getValue(row, 'targetRegNo') ?? null,
     createdBy: String(getValue(row, 'createdBy') || ''),
     dismissedCount: Number(getValue(row, 'dismissedCount') || 0),
   }
@@ -49,6 +51,7 @@ const normalizeNotification = (row) => {
     isActive,
     startDate: dateOnly(getValue(row, 'startDate')),
     endDate: dateOnly(getValue(row, 'endDate')),
+    audienceType: String(getValue(row, 'audienceType') || 'AllSuppliers'),
     targetRegNo: getValue(row, 'targetRegNo') ?? null,
     createdBy: String(getValue(row, 'createdBy') || ''),
     readCount: Number(getValue(row, 'readCount') || 0),
@@ -63,27 +66,40 @@ const normalizeDashboard = (response) => ({
 
 const toNullableDateTime = (value) => value || null
 
-const buildNewsPayload = ({ title, description, expiryDate, active }) => ({
+const toNullableRegNo = (value) => {
+  const trimmed = String(value || '').trim()
+  if (!trimmed) return null
+
+  const regNo = Number(trimmed)
+  return Number.isFinite(regNo) ? regNo : null
+}
+
+const buildNewsPayload = ({ title, description, expiryDate, active, audienceType, targetRegNo }) => ({
   title: title.trim(),
   description: description.trim(),
   content: description.trim(),
   expiryDate: toNullableDateTime(expiryDate),
   startDate: null,
   isActive: active,
+  publishNow: active,
+  audienceType: audienceType || 'AllSuppliers',
+  targetRegNo: audienceType === 'SpecificSupplier' ? toNullableRegNo(targetRegNo) : null,
   showPopup: false,
   priority: 1,
 })
 
-const buildNotificationPayload = ({ title, message, schedule }) => ({
+const buildNotificationPayload = ({ title, message, schedule, type, audienceType, targetRegNo }) => ({
   title: title.trim(),
   message: message.trim(),
-  type: 'info',
+  type: type || 'General',
   schedule: toNullableDateTime(schedule),
   startDate: null,
   endDate: null,
   priority: 1,
   isActive: true,
-  targetRegNo: null,
+  publishNow: !schedule,
+  audienceType: audienceType || 'AllSuppliers',
+  targetRegNo: audienceType === 'SpecificSupplier' ? toNullableRegNo(targetRegNo) : null,
 })
 
 export const communicationsApi = {

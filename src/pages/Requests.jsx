@@ -83,7 +83,7 @@ function Avatar({ name, size = 'md' }) {
   const classes = size === 'lg' ? 'w-12 h-12 text-base' : 'w-9 h-9 text-sm'
 
   return (
-    <div className={`${classes} rounded-full bg-green-100 flex items-center justify-center font-semibold text-green-700 flex-shrink-0`}>
+    <div className={`${classes} rounded-full bg-green-100 flex items-center justify-center font-semibold text-green-700 shrink-0`}>
       {initials(name)}
     </div>
   )
@@ -457,7 +457,7 @@ function SupplierWindow({ regNo, tab, requestsByType, onClose }) {
     >
       <div className="w-full max-w-7xl overflow-hidden rounded-lg bg-white shadow-[0_24px_90px_rgba(15,23,42,0.35)] ring-1 ring-slate-200 dark:bg-slate-950 dark:ring-slate-800">
         <header className="relative border-b border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-          <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-500 via-amber-400 to-sky-500" />
+          <div className="absolute inset-x-0 top-0 h-1 bg-linear-to-r from-emerald-500 via-amber-400 to-sky-500" />
 
           <div className="flex items-center justify-between gap-4 px-6 py-5">
             <div className="flex min-w-0 items-center gap-4">
@@ -797,7 +797,7 @@ function SidePanel({
         </div>
       ) : (
         <div className="flex items-start gap-2 p-3 bg-slate-50 dark:bg-slate-700/40 border border-slate-200 dark:border-slate-700 rounded-md">
-          <Info size={14} className="text-green-600 mt-0.5 flex-shrink-0" />
+          <Info size={14} className="text-green-600 mt-0.5 shrink-0" />
 
           <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
             This request is <strong className="font-semibold capitalize">{req.status}</strong>.
@@ -1275,7 +1275,7 @@ export default function Requests() {
           </div>
         </div>
 
-        <div className="w-full xl:w-80 flex-shrink-0">
+        <div className="w-full xl:w-80 shrink-0">
           <SidePanel
             req={selected}
             draft={draft}
