@@ -27,6 +27,9 @@ import {
 import StatusBadge, { getStatusChartColor } from '../components/ui/StatusBadge'
 import { dashboardRequestsApi } from '../services/dashboardRequestsApi'
 import { supplierDashboardApi } from '../services/supplierDashboardApi'
+import { adminAuthStorage } from '../services/adminApiClient'
+import { hasAdminPermission, hasExplicitAdminPermission } from '../services/adminPermissions'
+import { dashboardPermissionsApi } from '../services/dashboardPermissionsApi'
 
 const tabs = [
   { id: 'advance', label: 'Advance Requests', icon: Banknote },
@@ -36,6 +39,29 @@ const tabs = [
 
 const validTabs = tabs.map(tab => tab.id)
 const validFilters = ['all', 'pending', 'approved', 'rejected']
+
+const requestActionPermissions = {
+  approve: {
+    advance: ['requests.approve', 'advance_requests.approve', 'advance.approve', 'approve_requests', 'approve_advance_requests', 'approve'],
+    fertilizer: ['requests.approve', 'fertilizer_requests.approve', 'fertilizer.approve', 'approve_requests', 'approve_fertilizer_requests', 'approve'],
+    items: ['requests.approve', 'item_requests.approve', 'items.approve', 'item.approve', 'approve_requests', 'approve_item_requests', 'approve'],
+  },
+  reject: {
+    advance: ['requests.reject', 'advance_requests.reject', 'advance.reject', 'reject_requests', 'reject_advance_requests', 'reject'],
+    fertilizer: ['requests.reject', 'fertilizer_requests.reject', 'fertilizer.reject', 'reject_requests', 'reject_fertilizer_requests', 'reject'],
+    items: ['requests.reject', 'item_requests.reject', 'items.reject', 'item.reject', 'reject_requests', 'reject_item_requests', 'reject'],
+  },
+  approveRejected: {
+    advance: ['requests.status_override', 'status_override'],
+    fertilizer: ['requests.status_override', 'status_override'],
+    items: ['requests.status_override', 'status_override'],
+  },
+  rejectApproved: {
+    advance: ['requests.status_override', 'status_override'],
+    fertilizer: ['requests.status_override', 'status_override'],
+    items: ['requests.status_override', 'status_override'],
+  },
+}
 
 const tabActiveClass = {
   advance: 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 shadow-sm',
@@ -349,11 +375,10 @@ function RequestTableSummary({ rows, tab }) {
   )
 }
 
-function SupplierWindow({ regNo, tab, requestsByType, onClose }) {
+function SupplierWindow({ regNo, tab, requestsByType, salaryDate, onClose }) {
   const fallbackSupplier = mockSuppliers.find(supplier => supplier.regNo === regNo)
   const [supplier, setSupplier] = useState(fallbackSupplier || null)
   const [supplierLoading, setSupplierLoading] = useState(false)
-  const [salaryFrom, setSalaryFrom] = useState('2026-05-10')
   const [summaryStatus, setSummaryStatus] = useState('all')
 
   useEffect(() => {
@@ -396,6 +421,7 @@ function SupplierWindow({ regNo, tab, requestsByType, onClose }) {
 
   if (!supplier) return null
 
+  const salaryFrom = salaryDate || new Date().toISOString().slice(0, 10)
   const limit = calculateAdvanceLimit(regNo, salaryFrom)
   const isAdvanceView = tab === 'advance'
   const leafNetWeight = limit.superNet + limit.normalNet
@@ -481,15 +507,10 @@ function SupplierWindow({ regNo, tab, requestsByType, onClose }) {
             </div>
 
             <div className="flex items-center gap-3">
-              <label className="hidden items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 sm:flex">
+              <div className="hidden items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 sm:flex">
                 Salary date
-                <input
-                  type="date"
-                  value={salaryFrom}
-                  onChange={event => setSalaryFrom(event.target.value)}
-                  className="bg-transparent text-xs font-bold text-slate-800 outline-none dark:text-white"
-                />
-              </label>
+                <span className="text-xs font-bold text-slate-800 dark:text-white">{salaryFrom}</span>
+              </div>
 
               <button
                 type="button"
@@ -588,15 +609,10 @@ function SupplierWindow({ regNo, tab, requestsByType, onClose }) {
                   )}
                 </div>
 
-                <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-500 shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 sm:hidden">
+                <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-500 shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 sm:hidden">
                   Salary date
-                  <input
-                    type="date"
-                    value={salaryFrom}
-                    onChange={event => setSalaryFrom(event.target.value)}
-                    className="bg-transparent text-xs font-bold text-slate-800 outline-none dark:text-white"
-                  />
-                </label>
+                  <span className="text-xs font-bold text-slate-800 dark:text-white">{salaryFrom}</span>
+                </div>
               </section>
 
               <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -692,6 +708,10 @@ function SidePanel({
   req,
   draft,
   statusSaving,
+  canApprove,
+  canReject,
+  canApproveRejected,
+  canRejectApproved,
   onDraftChange,
   onApprove,
   onReject,
@@ -707,6 +727,17 @@ function SidePanel({
   }
 
   const canEdit = req.status === 'pending' || req.status === 'rejected'
+  const canApproveRequest = req.status === 'pending'
+    ? canApprove
+    : req.status === 'rejected'
+      ? canApproveRejected
+      : false
+  const canRejectRequest = req.status === 'pending'
+    ? canReject
+    : req.status === 'approved'
+      ? canRejectApproved
+      : false
+  const canShowActions = canApproveRequest || canRejectRequest
 
   return (
     <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-4 space-y-4 shadow-sm sticky top-4">
@@ -760,6 +791,13 @@ function SidePanel({
         </div>
       )}
 
+      {(!canApprove || !canReject) && (
+        <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-900/15 dark:text-amber-300">
+          <Info size={14} className="mt-0.5 shrink-0" />
+          <p>Approve, reject, and status-reversal actions depend on your assigned request permissions.</p>
+        </div>
+      )}
+
       <div>
         <label className="block">
           <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide block mb-1.5">Remarks</span>
@@ -775,11 +813,11 @@ function SidePanel({
         </label>
       </div>
 
-      {canEdit ? (
+      {canShowActions ? (
         <div className="flex gap-2">
           <button
             type="button"
-            disabled={statusSaving}
+            disabled={statusSaving || !canRejectRequest}
             onClick={() => onReject(req.id)}
             className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
           >
@@ -788,7 +826,7 @@ function SidePanel({
 
           <button
             type="button"
-            disabled={statusSaving}
+            disabled={statusSaving || !canApproveRequest}
             onClick={() => onApprove(req.id)}
             className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-md bg-green-700 text-white hover:bg-green-800 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
           >
@@ -817,6 +855,7 @@ export default function Requests() {
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
+  const [salaryDate, setSalaryDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [selectedKey, setSelectedKey] = useState(null)
   const [draft, setDraft] = useState({})
   const [supplierWindow, setSupplierWindow] = useState(null)
@@ -824,10 +863,42 @@ export default function Requests() {
   const [requestError, setRequestError] = useState('')
   const [statusSaving, setStatusSaving] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [currentAdmin, setCurrentAdmin] = useState(() => adminAuthStorage.getUser())
 
   const [advance, setAdvance] = useState([])
   const [fertilizer, setFertilizer] = useState([])
   const [items, setItems] = useState([])
+  const [requestTotals, setRequestTotals] = useState(null)
+
+  useEffect(() => {
+    const admin = adminAuthStorage.getUser()
+    if (!admin?.id || admin.isSuperAdmin) {
+      setCurrentAdmin(admin)
+      return
+    }
+
+    let mounted = true
+    dashboardPermissionsApi
+      .getUserPermissions(admin.id)
+      .then(permissions => {
+        if (!mounted) return
+        const updatedAdmin = {
+          ...admin,
+          hasPermissionData: true,
+          modulePermissions: permissions.modulePermissions || {},
+          subPermissions: permissions.subPermissions || {},
+        }
+        adminAuthStorage.setUser(updatedAdmin)
+        setCurrentAdmin(updatedAdmin)
+      })
+      .catch(() => {
+        if (mounted) setCurrentAdmin(admin)
+      })
+
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   useEffect(() => {
     const nextTab = normalizeTab(searchParams.get('tab'))
@@ -864,6 +935,7 @@ export default function Requests() {
         setAdvance(result.advance)
         setFertilizer(result.fertilizer)
         setItems(result.items)
+        setRequestTotals(result.totals)
 
         setSelectedKey(currentKey => {
           if (!currentKey) return null
@@ -926,7 +998,7 @@ export default function Requests() {
   const requestStats = [
     {
       label: 'All Requests',
-      value: tabRows.length,
+      value: requestTotals?.totalCount || tabRows.length,
       tone: 'text-slate-900 dark:text-white',
     },
     {
@@ -945,6 +1017,11 @@ export default function Requests() {
       tone: 'text-red-600 dark:text-red-300',
     },
   ]
+
+  const canApproveCurrentTab = hasAdminPermission(currentAdmin, requestActionPermissions.approve[tab])
+  const canRejectCurrentTab = hasAdminPermission(currentAdmin, requestActionPermissions.reject[tab])
+  const canApproveRejectedCurrentTab = hasExplicitAdminPermission(currentAdmin, requestActionPermissions.approveRejected[tab])
+  const canRejectApprovedCurrentTab = hasExplicitAdminPermission(currentAdmin, requestActionPermissions.rejectApproved[tab])
 
   function countFor(status) {
     const data = allData[tab].filter(row => isInDateRange(row.date, fromDate, toDate))
@@ -1001,8 +1078,59 @@ export default function Requests() {
     setItems(previous => updater(previous))
   }
 
+  async function refreshAdminPermissionsForAction() {
+    const admin = adminAuthStorage.getUser()
+
+    if (!admin?.id || admin.isSuperAdmin) {
+      setCurrentAdmin(admin)
+      return admin
+    }
+
+    try {
+      const permissions = await dashboardPermissionsApi.getUserPermissions(admin.id)
+      const updatedAdmin = {
+        ...admin,
+        hasPermissionData: true,
+        modulePermissions: permissions.modulePermissions || {},
+        subPermissions: permissions.subPermissions || {},
+      }
+
+      adminAuthStorage.setUser(updatedAdmin)
+      setCurrentAdmin(updatedAdmin)
+      return updatedAdmin
+    } catch {
+      return currentAdmin
+    }
+  }
+
   async function updateStatus(id, status) {
     if (statusSaving) return
+    const currentRow = allData[tab].find(row => row.id === id)
+    const currentStatus = currentRow?.status || 'pending'
+    const isApproveRejected = status === 'approved' && currentStatus === 'rejected'
+    const isRejectApproved = status === 'rejected' && currentStatus === 'approved'
+    const permissionAdmin = isApproveRejected || isRejectApproved
+      ? await refreshAdminPermissionsForAction()
+      : currentAdmin
+    const canApproveRejectedNow = hasExplicitAdminPermission(permissionAdmin, requestActionPermissions.approveRejected[tab])
+    const canRejectApprovedNow = hasExplicitAdminPermission(permissionAdmin, requestActionPermissions.rejectApproved[tab])
+
+    if (isApproveRejected && !canApproveRejectedNow) {
+      setRequestError('You do not have permission to approve rejected requests.')
+      return
+    }
+    if (status === 'approved' && currentStatus !== 'rejected' && !canApproveCurrentTab) {
+      setRequestError('You do not have permission to approve pending requests.')
+      return
+    }
+    if (isRejectApproved && !canRejectApprovedNow) {
+      setRequestError('You do not have permission to reject approved requests.')
+      return
+    }
+    if (status === 'rejected' && currentStatus !== 'approved' && !canRejectCurrentTab) {
+      setRequestError('You do not have permission to reject pending requests.')
+      return
+    }
 
     setStatusSaving(true)
     setRequestError('')
@@ -1022,6 +1150,7 @@ export default function Requests() {
       setDraft(updated)
       setSelectedKey(`${tab}-${updated.id}`)
       setRefreshKey(current => current + 1)
+      setRequestError('')
     } catch (error) {
       setRequestError(error.message || 'Unable to update request status')
     } finally {
@@ -1135,7 +1264,17 @@ export default function Requests() {
                 />
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+                Salary date
+                <input
+                  type="date"
+                  value={salaryDate}
+                  onChange={event => setSalaryDate(event.target.value)}
+                  className="bg-transparent text-xs font-bold text-slate-800 outline-none dark:text-white"
+                />
+              </label>
+
                 {validFilters.map(status => (
                   <button
                     key={status}
@@ -1280,6 +1419,10 @@ export default function Requests() {
             req={selected}
             draft={draft}
             statusSaving={statusSaving}
+            canApprove={canApproveCurrentTab}
+            canReject={canRejectCurrentTab}
+            canApproveRejected={canApproveRejectedCurrentTab}
+            canRejectApproved={canRejectApprovedCurrentTab}
             onDraftChange={handleDraftChange}
             onApprove={id => updateStatus(id, 'approved')}
             onReject={id => updateStatus(id, 'rejected')}
@@ -1293,6 +1436,7 @@ export default function Requests() {
           regNo={supplierWindow}
           tab={tab}
           requestsByType={allData}
+          salaryDate={salaryDate}
           onClose={() => setSupplierWindow(null)}
         />
       )}

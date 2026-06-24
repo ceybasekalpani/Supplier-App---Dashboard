@@ -1,18 +1,40 @@
 import { useEffect, useMemo, useState } from 'react'
-import { 
-  Printer, Download, Package, CheckCircle2,
-  Banknote, Sprout, Send, Truck, 
-  CheckCircle, AlertCircle,
-  Leaf, RefreshCw
+import {
+  AlertCircle,
+  Banknote,
+  CheckCircle,
+  CheckCircle2,
+  Download,
+  Leaf,
+  Package,
+  Printer,
+  RefreshCw,
+  Send,
+  Sprout,
+  Truck,
+  X,
 } from 'lucide-react'
-import { disbursementApi } from '../services/disbursementApi'
-import StatusBadge from '../components/ui/StatusBadge'
 import Combobox from '../components/ui/Combobox'
-import { downloadPdf } from '../utils/pdf'
+import StatusBadge from '../components/ui/StatusBadge'
+import { disbursementApi } from '../services/disbursementApi'
+import { downloadDocReport, printReportAsPdf } from '../utils/reports'
+
+const typeConfig = {
+  advance: { label: 'Advance', icon: Banknote, tone: 'amber' },
+  fertilizer: { label: 'Fertilizer', icon: Sprout, tone: 'emerald' },
+  items: { label: 'Item', icon: Package, tone: 'teal' },
+}
+
+const paymentOptions = [
+  { value: '', label: 'Select Method' },
+  { value: 'Cash', label: 'Cash' },
+  { value: 'Bank Transfer', label: 'Bank Transfer' },
+  { value: 'Cheque', label: 'Cheque' },
+]
 
 const formatDisplayDate = (date) => {
   if (!date) return 'Not set'
-  return new Date(`${date}T00:00:00`).toLocaleDateString('en-LK', {
+  return new Date(`${String(date).slice(0, 10)}T00:00:00`).toLocaleDateString('en-LK', {
     year: 'numeric',
     month: 'short',
     day: '2-digit',
@@ -23,69 +45,359 @@ const formatCurrency = (value) => `Rs. ${Number(value || 0).toLocaleString()}`
 
 const formatQuantity = (value, unit) => `${Number(value || 0).toLocaleString()} ${unit || ''}`.trim()
 
-const getQuantityBreakdown = (items, type) => {
-  return Object.values(items.reduce((groups, item) => {
-    const name = type === 'fertilizer' ? item.fertilizerType : item.itemType
-    const key = `${name || 'Item'}__${item.unit || ''}`
+const rowKey = (type, id) => `${type}-${id}`
 
-    if (!groups[key]) {
-      groups[key] = {
-        name: name || 'Item',
-        unit: item.unit || '',
-        qty: 0,
-      }
-    }
+const isPhysicalAdvance = (row, paymentMethods) => (
+  row.issuedType === 'advance' && ['Cash', 'Cheque'].includes(paymentMethods[row.id])
+)
 
-    groups[key].qty += Number(item.approvedQty || 0)
-    return groups
-  }, {}))
+const isDeliveryNoteEligible = (row, paymentMethods) => (
+  row.issuedType === 'fertilizer' || row.issuedType === 'items' || isPhysicalAdvance(row, paymentMethods)
+)
+
+const getRowLabel = (row) => {
+  if (row.issuedType === 'advance') return 'Advance'
+  if (row.issuedType === 'fertilizer') return row.fertilizerType || 'Fertilizer'
+  return row.itemType || 'Item'
 }
 
-function DisbursementTableSummary({ items, type }) {
-  const supplierCount = new Set(items.map(item => item.regNo)).size
-  const isAdvance = type === 'advance'
-  const totalAmount = items.reduce((sum, item) => sum + Number(item.approvedAmount || 0), 0)
-  const quantityBreakdown = isAdvance ? [] : getQuantityBreakdown(items, type)
-  const Icon = isAdvance ? Banknote : type === 'fertilizer' ? Sprout : Package
-  const toneClass = isAdvance
-    ? 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/50 dark:bg-amber-900/15 dark:text-amber-200'
-    : type === 'fertilizer'
-      ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-900/15 dark:text-emerald-200'
-      : 'border-teal-200 bg-teal-50 text-teal-800 dark:border-teal-900/50 dark:bg-teal-900/15 dark:text-teal-200'
-  const valueLabel = isAdvance
-    ? 'Advance amount count'
-    : type === 'fertilizer'
-      ? 'Fertilizer-wise quantity count'
-      : 'Item-wise quantity count'
+const getRowValue = (row) => {
+  if (row.issuedType === 'advance') return formatCurrency(row.approvedAmount)
+  return formatQuantity(row.approvedQty, row.unit)
+}
+
+function Toast({ type, message }) {
+  if (!message) return null
+  const isError = type === 'error'
+  const Icon = isError ? AlertCircle : CheckCircle
 
   return (
-    <div className="border-t border-slate-200 bg-white px-5 py-4 dark:border-slate-700 dark:bg-slate-800">
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[220px_1fr]">
-        <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/50">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Supplier count</p>
-          <p className="mt-1 text-2xl font-bold text-slate-900 dark:text-white">{supplierCount}</p>
+    <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-lg px-4 py-3 text-white shadow-lg ${isError ? 'bg-red-600' : 'bg-green-700'}`}>
+      <Icon size={16} /> {message}
+    </div>
+  )
+}
+
+function MetricCard({ label, value, icon: Icon, className }) {
+  return (
+    <div className={`rounded-xl border p-4 shadow-sm ${className}`}>
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide opacity-80">{label}</p>
+          <p className="mt-1 text-3xl font-bold">{value}</p>
+        </div>
+        <Icon size={22} />
+      </div>
+    </div>
+  )
+}
+
+function SelectedReviewModal({
+  borrower,
+  eligibleRows,
+  excludedRows,
+  generating,
+  onBorrowerChange,
+  onClose,
+  onGenerate,
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm"
+      onClick={event => event.target === event.currentTarget && onClose()}
+    >
+      <div className="w-full max-w-5xl overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-200 bg-slate-50 px-5 py-4 dark:border-slate-700 dark:bg-slate-800">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide text-green-700 dark:text-green-300">Generate delivery note</p>
+            <h3 className="mt-1 text-lg font-bold text-slate-900 dark:text-white">Review selected disbursements</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              {eligibleRows.length} record{eligibleRows.length === 1 ? '' : 's'} will be dispatched
+              {excludedRows.length > 0 ? `, ${excludedRows.length} bank transfer advance${excludedRows.length === 1 ? '' : 's'} excluded` : ''}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-white hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-white"
+            title="Close"
+          >
+            <X size={18} />
+          </button>
         </div>
 
-        <div className={`rounded-lg border px-3 py-3 ${toneClass}`}>
-          <div className="flex items-center gap-2">
-            <Icon size={15} />
-            <p className="text-[10px] font-semibold uppercase tracking-wide opacity-75">{valueLabel}</p>
+        <div className="max-h-[75vh] overflow-y-auto p-5">
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
+            <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+              Borrower name
+              <input
+                value={borrower.borrowerName}
+                onChange={event => onBorrowerChange('borrowerName', event.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-green-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+              />
+            </label>
+            <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+              Borrower role
+              <input
+                value={borrower.borrowerRole}
+                onChange={event => onBorrowerChange('borrowerRole', event.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-green-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+              />
+            </label>
+            <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+              Vehicle no
+              <input
+                value={borrower.vehicleNo}
+                onChange={event => onBorrowerChange('vehicleNo', event.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-green-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+              />
+            </label>
+            <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+              Route
+              <input
+                value={borrower.routeName}
+                onChange={event => onBorrowerChange('routeName', event.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-green-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+              />
+            </label>
           </div>
 
-          {isAdvance ? (
-            <p className="mt-1 text-2xl font-bold">{formatCurrency(totalAmount)}</p>
-          ) : (
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {quantityBreakdown.length > 0 ? quantityBreakdown.map(item => (
-                <span key={`${item.name}-${item.unit}`} className="rounded-md bg-white/75 px-2.5 py-1 text-xs font-bold ring-1 ring-black/5 dark:bg-slate-950/30">
-                  {item.name}: {formatQuantity(item.qty, item.unit)}
-                </span>
-              )) : (
-                <span className="text-sm font-bold">No quantity</span>
-              )}
-            </div>
-          )}
+          <label className="mt-3 block text-sm font-semibold text-slate-700 dark:text-slate-300">
+            Remarks
+            <textarea
+              value={borrower.remarks}
+              onChange={event => onBorrowerChange('remarks', event.target.value)}
+              rows={2}
+              className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-green-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+            />
+          </label>
+
+          <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
+            <section className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
+              <div className="border-b border-slate-200 bg-green-50 px-4 py-3 dark:border-slate-700 dark:bg-green-900/10">
+                <h4 className="text-sm font-bold text-slate-900 dark:text-white">Included in delivery note</h4>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-800">
+                    <tr>
+                      <th className="px-4 py-3 text-left">RegNo</th>
+                      <th className="px-4 py-3 text-left">Supplier</th>
+                      <th className="px-4 py-3 text-left">Type</th>
+                      <th className="px-4 py-3 text-left">Amount / Qty</th>
+                      <th className="px-4 py-3 text-left">Method</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {eligibleRows.length === 0 ? (
+                      <tr>
+                        <td colSpan="5" className="px-4 py-8 text-center text-slate-500">No eligible records selected</td>
+                      </tr>
+                    ) : eligibleRows.map(row => (
+                      <tr key={rowKey(row.issuedType, row.id)} className="border-t border-slate-100 dark:border-slate-700">
+                        <td className="px-4 py-3 font-mono font-semibold text-green-700 dark:text-green-400">{row.regNo}</td>
+                        <td className="px-4 py-3 text-slate-800 dark:text-slate-200">{row.supplierName}</td>
+                        <td className="px-4 py-3">{getRowLabel(row)}</td>
+                        <td className="px-4 py-3 font-semibold">{getRowValue(row)}</td>
+                        <td className="px-4 py-3">{row.method}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section className="rounded-xl border border-amber-200 bg-amber-50/60 p-4 dark:border-amber-900/50 dark:bg-amber-900/10">
+              <h4 className="text-sm font-bold text-slate-900 dark:text-white">Excluded advances</h4>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Cash and cheque advances are included. Bank transfers are issued outside the delivery note.</p>
+              <div className="mt-3 space-y-2">
+                {excludedRows.length === 0 ? (
+                  <p className="rounded-lg bg-white px-3 py-3 text-sm text-slate-500 ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700">None</p>
+                ) : excludedRows.map(row => (
+                  <div key={rowKey(row.issuedType, row.id)} className="rounded-lg bg-white px-3 py-2 text-sm ring-1 ring-amber-200 dark:bg-slate-800 dark:ring-amber-900/50">
+                    <p className="font-semibold text-slate-900 dark:text-white">{row.supplierName}</p>
+                    <p className="text-xs text-slate-500">{formatCurrency(row.approvedAmount)} / {row.method}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
         </div>
+
+        <div className="flex items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4 dark:border-slate-700 dark:bg-slate-800">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-white dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onGenerate}
+            disabled={generating || eligibleRows.length === 0}
+            className="inline-flex items-center gap-2 rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            {generating ? <RefreshCw size={15} className="animate-spin" /> : <Send size={15} />}
+            Generate and Dispatch
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function DisbursementTable({
+  rows,
+  type,
+  selectedRows,
+  paymentMethods,
+  issuingKey,
+  onSelect,
+  onSelectAll,
+  onPaymentMethod,
+  onIssueTransfer,
+}) {
+  const config = typeConfig[type]
+  const Icon = config.icon
+  const selectableRows = rows.filter(row => (
+    !row.issued && (type !== 'advance' || Boolean(paymentMethods[row.id]))
+  ))
+  const selectedCount = selectableRows.filter(row => selectedRows[rowKey(type, row.id)]).length
+  const allSelected = selectableRows.length > 0 && selectedCount === selectableRows.length
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
+      <div className="border-b border-slate-200 px-6 py-4 dark:border-slate-700">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <Icon size={18} className="text-slate-500" />
+              <h3 className="font-semibold text-slate-900 dark:text-white">{config.label} Dispatch Queue</h3>
+            </div>
+            <p className="mt-0.5 text-xs text-slate-500">
+              {rows.filter(row => !row.issued).length} approved requests ready for dispatch / {selectedCount} selected in this tab
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => onSelectAll(type, selectableRows, true)}
+              disabled={selectableRows.length === 0 || allSelected}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-green-300 bg-green-50 px-3 py-1.5 text-xs font-semibold text-green-800 transition-colors hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-green-800 dark:bg-green-900/20 dark:text-green-200 dark:hover:bg-green-900/30"
+            >
+              <CheckCircle2 size={12} />
+              Select All
+            </button>
+            <button
+              type="button"
+              onClick={() => onSelectAll(type, selectableRows, false)}
+              disabled={selectedCount === 0}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+            >
+              <X size={12} />
+              Clear
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/50">
+              <th className="w-12 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  disabled={selectableRows.length === 0}
+                  onChange={event => onSelectAll(type, selectableRows, event.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 text-green-700 focus:ring-green-600 disabled:cursor-not-allowed disabled:opacity-40"
+                  title="Select all visible rows"
+                />
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">RegNo</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Supplier</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Approved Date</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Details</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Method</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan="8" className="px-4 py-10 text-center text-slate-500">
+                  <Icon size={32} className="mx-auto mb-2 opacity-30" />
+                  No {config.label.toLowerCase()} requests available
+                </td>
+              </tr>
+            ) : rows.map(row => {
+              const key = rowKey(type, row.id)
+              const selected = Boolean(selectedRows[key])
+              const method = type === 'advance' ? paymentMethods[row.id] : 'Physical Delivery'
+              const canSelect = !row.issued && (type !== 'advance' || Boolean(method))
+
+              return (
+                <tr key={key} className={`border-b border-slate-100 transition-colors dark:border-slate-700/50 ${row.issued ? 'bg-green-50 dark:bg-green-900/10' : 'hover:bg-slate-50 dark:hover:bg-slate-700/30'}`}>
+                  <td className="px-4 py-3">
+                    <input
+                      type="checkbox"
+                      checked={selected}
+                      disabled={!canSelect}
+                      onChange={event => onSelect(type, row, event.target.checked)}
+                      className="h-4 w-4 rounded border-slate-300 text-green-700 focus:ring-green-600 disabled:cursor-not-allowed disabled:opacity-40"
+                    />
+                  </td>
+                  <td className="px-4 py-3 font-mono font-semibold text-green-700 dark:text-green-400">{row.regNo}</td>
+                  <td className="px-4 py-3">
+                    <p className="font-medium text-slate-800 dark:text-slate-200">{row.supplierName}</p>
+                    <p className="text-xs text-slate-500">{row.route}</p>
+                  </td>
+                  <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{formatDisplayDate(row.approvedDate)}</td>
+                  <td className="px-4 py-3">
+                    <p className="font-semibold text-slate-800 dark:text-slate-200">{getRowLabel(row)}</p>
+                    <p className="text-xs text-slate-500">{getRowValue(row)}</p>
+                  </td>
+                  <td className="px-4 py-3">
+                    {type === 'advance' && !row.issued ? (
+                      <Combobox
+                        value={paymentMethods[row.id] || ''}
+                        onChange={(value) => onPaymentMethod(row.id, value)}
+                        options={paymentOptions}
+                        className="min-w-44"
+                        buttonClassName="bg-slate-50 py-1.5 text-sm dark:bg-slate-700"
+                      />
+                    ) : (
+                      <span className="text-slate-600 dark:text-slate-300">{row.paymentMethod || method}</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <StatusBadge status={row.trackingStatus || (row.issued ? 'issued' : 'approved')} className="px-2.5 py-1" />
+                  </td>
+                  <td className="px-4 py-3">
+                    {type === 'advance' && method === 'Bank Transfer' && !row.issued ? (
+                      <button
+                        type="button"
+                        onClick={() => onIssueTransfer(row)}
+                        disabled={issuingKey === key}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-70"
+                      >
+                        {issuingKey === key ? <RefreshCw size={12} className="animate-spin" /> : <Send size={12} />}
+                        Issue Transfer
+                      </button>
+                    ) : row.issued ? (
+                      <StatusBadge status="issued" className="rounded-lg px-3 py-1.5" />
+                    ) : (
+                      <span className="text-xs text-slate-500">Select for DN</span>
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   )
@@ -94,15 +406,27 @@ function DisbursementTableSummary({ items, type }) {
 export default function DisbursementManager() {
   const [selectedRoute, setSelectedRoute] = useState('all')
   const [issueTab, setIssueTab] = useState('advance')
+  const [advancePaymentFilter, setAdvancePaymentFilter] = useState('all')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [paymentMethods, setPaymentMethods] = useState({})
+  const [selectedRows, setSelectedRows] = useState({})
   const [showSuccess, setShowSuccess] = useState(null)
   const [showError, setShowError] = useState(null)
+  const [queueError, setQueueError] = useState('')
   const [queueLoading, setQueueLoading] = useState(true)
   const [issuingKey, setIssuingKey] = useState('')
-  const [isDownloading, setIsDownloading] = useState(false)
-  
+  const [showReview, setShowReview] = useState(false)
+  const [generating, setGenerating] = useState(false)
+  const [lastDeliveryNote, setLastDeliveryNote] = useState(null)
+  const [borrower, setBorrower] = useState({
+    borrowerName: '',
+    borrowerRole: '',
+    vehicleNo: '',
+    routeName: '',
+    remarks: '',
+  })
+
   const [advancesState, setAdvancesState] = useState([])
   const [fertilizersState, setFertilizersState] = useState([])
   const [itemsState, setItemsState] = useState([])
@@ -119,6 +443,7 @@ export default function DisbursementManager() {
         signal: controller.signal,
       })
       .then(result => {
+        setQueueError('')
         setAdvancesState(result.advance)
         setFertilizersState(result.fertilizer)
         setItemsState(result.items)
@@ -132,320 +457,265 @@ export default function DisbursementManager() {
       })
       .catch(error => {
         if (error.name !== 'AbortError') {
-          setShowError(error.message || 'Unable to load disbursement queue')
-          setTimeout(() => setShowError(null), 3000)
+          setQueueError(error.message || 'Unable to load disbursement queue')
         }
       })
       .finally(() => {
         setQueueLoading(false)
       })
 
-    return () => {
-      controller.abort()
-    }
+    return () => controller.abort()
   }, [dateFrom, dateTo, selectedRoute])
 
-  // Helper function to generate document content for an item
-  const generateDocumentContent = (item, type, method = null) => {
-    return `
-CEYLON TEA FACTORY - SUPPLIER DISBURSEMENT
-=============================================
-Voucher No: ${type.toUpperCase()}-${item.id}-${Date.now()}
-Date: ${new Date().toLocaleDateString()}
-Time: ${new Date().toLocaleTimeString()}
+  const allRows = useMemo(() => (
+    [...advancesState, ...fertilizersState, ...itemsState]
+  ), [advancesState, fertilizersState, itemsState])
 
-SUPPLIER INFORMATION
---------------------
-Registration No: ${item.regNo}
-Supplier Name: ${item.supplierName}
-
-DISBURSEMENT DETAILS
---------------------
-${item.approvedAmount ? `Approved Amount: Rs. ${item.approvedAmount.toLocaleString()}/-` : ''}
-${item.fertilizerType ? `Fertilizer Type: ${item.fertilizerType}` : ''}
-${item.itemType ? `Item Type: ${item.itemType}` : ''}
-${item.approvedQty ? `Quantity: ${item.approvedQty} ${item.unit || ''}` : ''}
-Payment Method: ${method || (item.approvedAmount ? (paymentMethods[item.id] || 'Not Selected') : 'Physical Delivery')}
-Status: Disbursed
-
-AUTHORIZATION
--------------
-_________________________
-Authorized Signature
-
-_________________________
-Supplier Signature
-
-=============================================
-Thank you for your partnership with Ceylon Tea Factory
-    `
-  }
-
-  const downloadFile = downloadPdf
-
-  // Bulk download all documents as separate files
-  const handleBulkDownload = async (type, items) => {
-    if (items.length === 0) {
-      setShowError('No items to download')
-      setTimeout(() => setShowError(null), 3000)
-      return
-    }
-    
-    setIsDownloading(true)
-    setShowSuccess(`Preparing to download ${items.length} documents...`)
-    
-    // Download each file with a delay to avoid browser blocking
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i]
-      const method = type === 'advance' ? (paymentMethods[item.id] || 'Not Selected') : 'Physical Delivery'
-      const content = generateDocumentContent(item, type, method)
-      const filename = `${type}_disbursement_${item.regNo}_${item.supplierName.replace(/\s/g, '_')}_${Date.now()}.pdf`
-      
-      // Use timeout to trigger downloads sequentially
-      await new Promise(resolve => {
-        setTimeout(() => {
-          downloadFile(content, filename)
-          resolve()
-        }, i * 500)
+  const selectedList = useMemo(() => (
+    Object.values(selectedRows)
+      .map(selection => {
+        const row = allRows.find(item => item.issuedType === selection.issuedType && item.id === selection.id)
+        if (!row) return null
+        const method = row.issuedType === 'advance' ? paymentMethods[row.id] : 'Physical Delivery'
+        return { ...row, method }
       })
-    }
-    
-    setIsDownloading(false)
-    setShowSuccess(`${items.length} documents downloaded successfully`)
-    setTimeout(() => setShowSuccess(null), 3000)
-  }
+      .filter(Boolean)
+  ), [allRows, paymentMethods, selectedRows])
 
-  // Update payment method for a specific advance request
-  const updatePaymentMethod = (id, method) => {
-    setPaymentMethods(prev => ({ ...prev, [id]: method }))
-  }
-
-  // Handle disburse action
-  const handleDisburse = async (type, item, method) => {
-    if (type === 'advance' && !method) {
-      setShowError('Please select a payment method')
-      setTimeout(() => setShowError(null), 3000)
-      return
-    }
-
-    const requestKey = `${type}-${item.id}`
-    if (issuingKey) return
-
-    setIssuingKey(requestKey)
-    setShowError(null)
-
-    try {
-      const tracking = await disbursementApi.issue({
-        issuedType: type,
-        requestId: item.id,
-        method: method || 'Physical Delivery',
-      })
-
-      const markIssued = previous => previous.map(row => (
-        row.id === item.id
-          ? { ...row, issued: true, paymentMethod: tracking.method, trackingStatus: tracking.currentStatus }
-          : row
-      ))
-
-      if (type === 'advance') {
-        setAdvancesState(markIssued)
-      } else if (type === 'fertilizer') {
-        setFertilizersState(markIssued)
-      } else if (type === 'items') {
-        setItemsState(markIssued)
-      }
-
-      setShowSuccess(`${type.toUpperCase()} disbursed to ${item.supplierName}`)
-      setTimeout(() => setShowSuccess(null), 3000)
-    } catch (error) {
-      setShowError(error.message || 'Unable to issue disbursement')
-      setTimeout(() => setShowError(null), 3000)
-    } finally {
-      setIssuingKey('')
-    }
-  }
-
-  // Handle print document for single item
-  const handlePrint = (item, type) => {
-    const printWindow = window.open('', '_blank')
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>${type.toUpperCase()} Disbursement - ${item.supplierName}</title>
-          <style>
-            body { font-family: 'Times New Roman', serif; padding: 40px; background: white; }
-            .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #2d5a27; padding-bottom: 20px; }
-            .logo { font-size: 24px; font-weight: bold; color: #2d5a27; }
-            .subtitle { color: #666; margin-top: 5px; }
-            .details { margin: 30px 0; }
-            .info-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-            .info-table th, .info-table td { border: 1px solid #ddd; padding: 12px; text-align: left; }
-            .info-table th { background-color: #f5f5f5; width: 30%; }
-            .footer { text-align: center; margin-top: 50px; font-size: 12px; color: #666; border-top: 1px solid #ddd; padding-top: 20px; }
-            .signature { margin-top: 40px; display: flex; justify-content: space-between; }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <div class="logo">🍃 CEYLON TEA FACTORY</div>
-            <div class="subtitle">Supplier Disbursement Voucher</div>
-            <p>Date: ${new Date().toLocaleDateString()} | Time: ${new Date().toLocaleTimeString()}</p>
-          </div>
-          <div class="details">
-            <h3>Disbursement Details</h3>
-            <table class="info-table">
-              <tr><th>Registration No</th><td>${item.regNo}</td></tr>
-              <tr><th>Supplier Name</th><td>${item.supplierName}</td></tr>
-              ${item.approvedAmount ? `<tr><th>Approved Amount</th><td>Rs. ${item.approvedAmount.toLocaleString()}/-</td>` : ''}
-              ${item.fertilizerType ? `<tr><th>Fertilizer Type</th><td>${item.fertilizerType}</td>` : ''}
-              ${item.itemType ? `<tr><th>Item Type</th><td>${item.itemType}</td>` : ''}
-              ${item.approvedQty ? `<tr><th>Quantity</th><td>${item.approvedQty} ${item.unit || ''}</td>` : ''}
-              <tr><th>Payment Method</th><td>${type === 'advance' ? (paymentMethods[item.id] || 'Not Selected') : 'Physical Delivery'}</td></tr>
-              <tr><th>Status</th><td><span style="color: green;">● Disbursed</span></td></tr>
-            </table>
-          </div>
-          <div class="signature">
-            <div>_________________<br/>Authorized Signature</div>
-            <div>_________________<br/>Supplier Signature</div>
-          </div>
-          <div class="footer">
-            <p>This is a computer generated document. No signature required.</p>
-            <p>Thank you for your partnership with Ceylon Tea Factory</p>
-          </div>
-        </body>
-      </html>
-    `)
-    printWindow.document.close()
-    printWindow.print()
-  }
-
-  // Handle download document for single item
-  const handleDownload = (item, type) => {
-    const method = type === 'advance' ? (paymentMethods[item.id] || 'Not Selected') : 'Physical Delivery'
-    const content = generateDocumentContent(item, type, method)
-    const filename = `${type}_disbursement_${item.regNo}_${item.supplierName.replace(/\s/g, '_')}_${Date.now()}.pdf`
-    downloadFile(content, filename)
-    setShowSuccess(`Downloaded document for ${item.supplierName}`)
-    setTimeout(() => setShowSuccess(null), 2000)
-  }
-
-  // Handle bulk print
-  const handleBulkPrint = (type, items) => {
-    if (items.length === 0) {
-      setShowError('No items to print')
-      setTimeout(() => setShowError(null), 3000)
-      return
-    }
-    
-    const printWindow = window.open('', '_blank')
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Bulk ${type} Disbursements</title>
-          <style>
-            body { font-family: 'Times New Roman', serif; padding: 40px; }
-            .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #2d5a27; }
-            .logo { font-size: 24px; font-weight: bold; color: #2d5a27; }
-            .page-break { page-break-before: always; margin-top: 40px; }
-            table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-            th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
-            th { background-color: #f5f5f5; }
-            .footer { text-align: center; margin-top: 50px; font-size: 12px; }
-            .signature { margin-top: 40px; display: flex; justify-content: space-between; }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <div class="logo">🍃 CEYLON TEA FACTORY</div>
-            <h3>Bulk ${type.toUpperCase()} Disbursements Report</h3>
-            <p>Date: ${new Date().toLocaleDateString()} | Total Items: ${items.length}</p>
-          </div>
-          ${items.map((item, index) => `
-            ${index > 0 ? '<div class="page-break"></div>' : ''}
-            <h3>Document ${index + 1}: ${item.supplierName}</h3>
-            <table>
-              <tr><th>Registration No</th><td>${item.regNo}</td></tr>
-              <tr><th>Supplier Name</th><td>${item.supplierName}</td></tr>
-              ${item.approvedAmount ? `<tr><th>Amount</th><td>Rs. ${item.approvedAmount.toLocaleString()}</td>` : ''}
-              ${item.fertilizerType ? `<tr><th>Fertilizer Type</th><td>${item.fertilizerType}</td>` : ''}
-              ${item.itemType ? `<tr><th>Item Type</th><td>${item.itemType}</td>` : ''}
-              ${item.approvedQty ? `<tr><th>Quantity</th><td>${item.approvedQty} ${item.unit || ''}</td>` : ''}
-              <tr><th>Payment Method</th><td>${type === 'advance' ? (paymentMethods[item.id] || 'Not Selected') : 'Physical Delivery'}</td></tr>
-            </table>
-            <div class="signature">
-              <div>_________________<br/>Authorized Signature</div>
-              <div>_________________<br/>Supplier Signature</div>
-            </div>
-            <div class="footer">
-              <p>Thank you for your partnership with Ceylon Tea Factory</p>
-            </div>
-          `).join('')}
-        </body>
-      </html>
-    `)
-    printWindow.document.close()
-    printWindow.print()
-  }
-
-  const isWithinDateRange = (date) => {
-    if (dateFrom && date < dateFrom) return false
-    if (dateTo && date > dateTo) return false
-    return true
-  }
-
-  // Filter by route and approval date
-  const filterItems = (items) => {
-    return items.filter(item => {
-      const routeMatches = selectedRoute === 'all' || item.route === selectedRoute
-      return routeMatches && isWithinDateRange(item.approvedDate)
-    })
-  }
-
-  const filteredAdvances = filterItems(advancesState)
-  const filteredFertilizers = filterItems(fertilizersState)
-  const filteredItems = filterItems(itemsState)
-
-  const issuedAdvanceCount = filteredAdvances.filter(i => i.issued).length
-  const issuedFertilizerCount = filteredFertilizers.filter(i => i.issued).length
-  const issuedItemCount = filteredItems.filter(i => i.issued).length
-  const pendingTotalCount = filteredAdvances.concat(filteredFertilizers, filteredItems).filter(i => !i.issued).length
-  const issuedTotalCount = issuedAdvanceCount + issuedFertilizerCount + issuedItemCount
-
-  // Get pending items counts
-  const pendingAdvancesCount = filteredAdvances.filter(i => !i.issued).length
-  const pendingFertilizersCount = filteredFertilizers.filter(i => !i.issued).length
-  const pendingItemsCount = filteredItems.filter(i => !i.issued).length
+  const eligibleSelectedRows = selectedList.filter(row => isDeliveryNoteEligible(row, paymentMethods))
+  const excludedSelectedRows = selectedList.filter(row => row.issuedType === 'advance' && !isPhysicalAdvance(row, paymentMethods))
 
   const routeOptions = useMemo(() => ([
     { id: 'all', name: 'All Routes' },
     ...routeNames.map(route => ({ id: route, name: route })),
   ]), [routeNames])
 
+  const selectedRoutes = Array.from(new Set(eligibleSelectedRows.map(row => row.route).filter(Boolean)))
+
+  const updateRows = (type, updater) => {
+    if (type === 'advance') setAdvancesState(updater)
+    if (type === 'fertilizer') setFertilizersState(updater)
+    if (type === 'items') setItemsState(updater)
+  }
+
+  const updatePaymentMethod = (id, method) => {
+    setPaymentMethods(prev => ({ ...prev, [id]: method }))
+    setSelectedRows(prev => {
+      const key = rowKey('advance', id)
+      if (!prev[key] || method) return prev
+      const next = { ...prev }
+      delete next[key]
+      return next
+    })
+  }
+
+  const selectRow = (type, row, checked) => {
+    const key = rowKey(type, row.id)
+    setSelectedRows(prev => {
+      const next = { ...prev }
+      if (checked) {
+        next[key] = { id: row.id, issuedType: type }
+      } else {
+        delete next[key]
+      }
+      return next
+    })
+  }
+
+  const selectAllRows = (type, rows, checked) => {
+    setSelectedRows(prev => {
+      const next = { ...prev }
+
+      rows.forEach(row => {
+        const key = rowKey(type, row.id)
+        if (checked) {
+          next[key] = { id: row.id, issuedType: type }
+        } else {
+          delete next[key]
+        }
+      })
+
+      return next
+    })
+  }
+
+  const issueBankTransfer = async (row) => {
+    const key = rowKey('advance', row.id)
+    setIssuingKey(key)
+    setShowError(null)
+
+    try {
+      const tracking = await disbursementApi.issue({
+        issuedType: 'advance',
+        requestId: row.id,
+        method: 'Bank Transfer',
+      })
+
+      setAdvancesState(previous => previous.map(item => (
+        item.id === row.id
+          ? { ...item, issued: true, paymentMethod: tracking.method, trackingStatus: tracking.currentStatus }
+          : item
+      )))
+      setSelectedRows(previous => {
+        const next = { ...previous }
+        delete next[key]
+        return next
+      })
+      setShowSuccess(`Bank transfer issued for ${row.supplierName}`)
+      setTimeout(() => setShowSuccess(null), 3000)
+    } catch (error) {
+      setShowError(error.message || 'Unable to issue bank transfer')
+      setTimeout(() => setShowError(null), 3000)
+    } finally {
+      setIssuingKey('')
+    }
+  }
+
+  const openPrintHtml = async (deliveryNoteId) => {
+    try {
+      const html = await disbursementApi.getDeliveryNotePrintHtml(deliveryNoteId)
+      const printWindow = window.open('', '_blank')
+      if (!printWindow) {
+        setShowError('Popup blocked. Please allow popups to print the delivery note.')
+        setTimeout(() => setShowError(null), 3000)
+        return
+      }
+      printWindow.document.write(html)
+      printWindow.document.close()
+      printWindow.focus()
+      printWindow.print()
+    } catch (error) {
+      setShowError(error.message || 'Unable to print delivery note')
+      setTimeout(() => setShowError(null), 3000)
+    }
+  }
+
+  const generateDeliveryNote = async () => {
+    if (!borrower.borrowerName.trim() || !borrower.borrowerRole.trim()) {
+      setShowError('Borrower name and role are required')
+      setTimeout(() => setShowError(null), 3000)
+      return
+    }
+
+    setGenerating(true)
+    setShowError(null)
+
+    try {
+      const deliveryNote = await disbursementApi.generateDeliveryNote({
+        records: selectedList.map(row => ({
+          issuedType: row.issuedType,
+          requestId: row.id,
+          method: row.method,
+        })),
+        ...borrower,
+      })
+
+      const dispatchedKeys = new Set(deliveryNote.details.map(detail => rowKey(detail.itemType, detail.requestId)))
+      const dispatchedMethods = deliveryNote.details.reduce((methods, detail) => {
+        methods[rowKey(detail.itemType, detail.requestId)] = detail.paymentType || ''
+        return methods
+      }, {})
+
+      ;['advance', 'fertilizer', 'items'].forEach(type => {
+        updateRows(type, previous => previous.map(row => (
+          dispatchedKeys.has(rowKey(type, row.id))
+            ? { ...row, issued: true, paymentMethod: dispatchedMethods[rowKey(type, row.id)] || (type === 'advance' ? paymentMethods[row.id] : 'Physical Delivery'), trackingStatus: 'dispatched' }
+            : row
+        )))
+      })
+
+      setSelectedRows(previous => {
+        const next = { ...previous }
+        dispatchedKeys.forEach(key => delete next[key])
+        return next
+      })
+      setLastDeliveryNote(deliveryNote)
+      setShowReview(false)
+      setShowSuccess(`Delivery note ${deliveryNote.deliveryNoteNo} generated`)
+      setTimeout(() => setShowSuccess(null), 3000)
+    } catch (error) {
+      setShowError(error.message || 'Unable to generate delivery note')
+      setTimeout(() => setShowError(null), 3000)
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  const buildQueueReport = () => {
+    const reportRows = currentRows.map(row => ({
+      ...row,
+      paymentMethod: row.issuedType === 'advance'
+        ? paymentMethods[row.id] || row.paymentMethod || ''
+        : row.paymentMethod || 'Physical Delivery',
+    }))
+    const supplierCount = new Set(reportRows.map(row => row.regNo)).size
+    const typeCountLabel = `${typeConfig[issueTab]?.label || 'Disbursement'} Count`
+
+    return {
+      filename: `disbursement-${issueTab}-queue-report`,
+      title: `${typeConfig[issueTab]?.label || 'Disbursement'} Queue Report`,
+      subtitle: `Route: ${selectedRoute === 'all' ? 'All Routes' : selectedRoute} | Date range: ${dateFrom || 'Any'} to ${dateTo || 'Any'}${issueTab === 'advance' ? ` | Payment method: ${advancePaymentFilter === 'all' ? 'All' : advancePaymentFilter}` : ''}`,
+      rows: reportRows,
+      summary: [
+        { label: 'Total Rows', value: reportRows.length },
+        { label: 'Suppliers', value: supplierCount },
+        { label: 'Selected', value: selectedList.length },
+        { label: 'Eligible For DN', value: eligibleSelectedRows.length },
+        { label: 'Already Issued', value: reportRows.filter(row => row.issued).length },
+      ],
+      totals: [
+        { label: 'Supplier Count', value: supplierCount },
+        { label: typeCountLabel, value: reportRows.length },
+        { label: 'Selected Count', value: selectedList.length },
+        { label: 'Delivery Note Eligible Count', value: eligibleSelectedRows.length },
+        { label: 'Already Issued Count', value: reportRows.filter(row => row.issued).length },
+      ],
+      columns: [
+        { label: 'Request No', value: 'requestNo', width: 1.1 },
+        { label: 'Reg No', value: 'regNo', width: 0.9 },
+        { label: 'Supplier Name', value: 'supplierName', width: 1.8 },
+        { label: 'Approved Date', value: 'approvedDate', width: 1 },
+        { label: 'Item / Detail', value: row => getRowLabel(row), width: 1.45 },
+        { label: 'Amount / Qty', value: row => getRowValue(row), width: 1.15 },
+        { label: 'Method', value: 'paymentMethod', width: 1.2 },
+        { label: 'DN Eligible', value: row => isDeliveryNoteEligible(row, paymentMethods) ? 'Yes' : row.issuedType === 'advance' && row.paymentMethod === 'Bank Transfer' ? 'No - Bank Transfer' : 'No', width: 1.1 },
+      ],
+    }
+  }
+
+  const handleQueueReportFormat = (format) => {
+    if (!format) return
+    if (format === 'doc') {
+      downloadDocReport(buildQueueReport())
+      return
+    }
+    if (!printReportAsPdf(buildQueueReport())) {
+      setShowError('Popup blocked. Please allow popups to print or save the report as PDF.')
+      setTimeout(() => setShowError(null), 3000)
+    }
+  }
+
+  const filteredAdvances = advancesState.filter(row => {
+    if (advancePaymentFilter === 'all') return true
+    const method = paymentMethods[row.id] || row.paymentMethod || ''
+    if (advancePaymentFilter === 'unselected') return !method
+    return method === advancePaymentFilter
+  })
+  const filteredFertilizers = fertilizersState
+  const filteredItems = itemsState
+  const pendingTotalCount = allRows.filter(item => !item.issued).length
+  const issuedTotalCount = allRows.filter(item => item.issued).length
+
+  const currentRows = {
+    advance: filteredAdvances,
+    fertilizer: filteredFertilizers,
+    items: filteredItems,
+  }[issueTab]
+
   return (
     <div className="space-y-6 p-6">
-      {/* Success/Error Toasts */}
-      {showSuccess && (
-        <div className="fixed bottom-6 right-6 bg-green-700 text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-2 z-50">
-          <CheckCircle size={16} /> {showSuccess}
-        </div>
-      )}
-      {showError && (
-        <div className="fixed bottom-6 right-6 bg-red-600 text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-2 z-50">
-          <AlertCircle size={16} /> {showError}
-        </div>
-      )}
-      
-      {/* Downloading indicator */}
-      {isDownloading && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-slate-800 rounded-xl p-6 flex items-center gap-3 shadow-xl">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-700"></div>
-            <span className="text-slate-700 dark:text-slate-300">Downloading documents...</span>
-          </div>
-        </div>
-      )}
+      <Toast type="success" message={showSuccess} />
+      <Toast type="error" message={showError} />
 
       {queueLoading && (
         <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
@@ -456,87 +726,87 @@ Thank you for your partnership with Ceylon Tea Factory
         </div>
       )}
 
-      {/* Header with Tea Factory branding */}
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-lg bg-green-700 flex items-center justify-center">
-          <Leaf size={20} className="text-white" />
+      {!queueLoading && queueError && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 shadow-sm dark:border-amber-900/50 dark:bg-amber-900/15 dark:text-amber-200">
+          <div className="flex items-start gap-2">
+            <AlertCircle size={16} className="mt-0.5 shrink-0" />
+            <div>
+              <p className="font-semibold">Disbursement queue could not be loaded</p>
+              <p className="mt-0.5 text-xs opacity-90">{queueError}</p>
+            </div>
+          </div>
         </div>
-        <div>
-          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Disbursement Management</h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400">Issue approved requests, track disbursements, and confirm receipt</p>
+      )}
+
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-700">
+            <Leaf size={20} className="text-white" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Disbursement Management</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Generate delivery notes for cash, fertilizer, and item dispatches</p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <Combobox
+            value=""
+            onChange={handleQueueReportFormat}
+            disabled={currentRows.length === 0}
+            placeholder="Download Report"
+            options={[
+              { value: 'pdf', label: 'PDF' },
+              { value: 'doc', label: 'DOC' },
+            ]}
+            className="min-w-44"
+            buttonClassName="bg-white dark:bg-slate-800"
+          />
+          <button
+            type="button"
+            onClick={() => {
+              if (selectedRoutes.length === 1 && !borrower.routeName) {
+                setBorrower(prev => ({ ...prev, routeName: selectedRoutes[0] }))
+              }
+              setShowReview(true)
+            }}
+            disabled={selectedList.length === 0}
+            className="inline-flex items-center gap-2 rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Send size={16} />
+            Generate Delivery Note ({selectedList.length})
+          </button>
         </div>
       </div>
 
-      {/* Stats Cards - 5 in one row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        <div className="bg-gradient-to-br from-amber-50 to-amber-100 dark:from-amber-900/20 dark:to-amber-900/10 rounded-xl p-4 border-l-4 border-amber-500 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-amber-600 dark:text-amber-400 font-semibold uppercase tracking-wide">Disbursed Advances</p>
-              <p className="text-3xl font-bold text-amber-700 dark:text-amber-300 mt-1">{issuedAdvanceCount}</p>
-            </div>
-            <div className="w-10 h-10 rounded-full bg-amber-200 dark:bg-amber-800/50 flex items-center justify-center">
-              <Banknote size={20} className="text-amber-600 dark:text-amber-400" />
-            </div>
+      {lastDeliveryNote && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-green-200 bg-green-50 px-4 py-3 shadow-sm dark:border-green-900/50 dark:bg-green-900/10">
+          <div>
+            <p className="text-sm font-bold text-green-900 dark:text-green-200">Generated {lastDeliveryNote.deliveryNoteNo}</p>
+            <p className="text-xs text-green-700 dark:text-green-300">{lastDeliveryNote.totalRecords} records dispatched to delivery note tracking</p>
           </div>
+          <button
+            type="button"
+            onClick={() => openPrintHtml(lastDeliveryNote.id)}
+            className="inline-flex items-center gap-2 rounded-lg border border-green-300 bg-white px-3 py-2 text-xs font-semibold text-green-800 transition-colors hover:bg-green-100 dark:border-green-800 dark:bg-slate-800 dark:text-green-200 dark:hover:bg-green-900/20"
+          >
+            <Printer size={14} />
+            Print Delivery Note
+          </button>
         </div>
-        
-        <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 dark:from-emerald-900/20 dark:to-emerald-900/10 rounded-xl p-4 border-l-4 border-emerald-500 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold uppercase tracking-wide">Disbursed Fertilizers</p>
-              <p className="text-3xl font-bold text-emerald-700 dark:text-emerald-300 mt-1">{issuedFertilizerCount}</p>
-            </div>
-            <div className="w-10 h-10 rounded-full bg-emerald-200 dark:bg-emerald-800/50 flex items-center justify-center">
-              <Sprout size={20} className="text-emerald-600 dark:text-emerald-400" />
-            </div>
-          </div>
-        </div>
-        
-        <div className="bg-gradient-to-br from-teal-50 to-teal-100 dark:from-teal-900/20 dark:to-teal-900/10 rounded-xl p-4 border-l-4 border-teal-500 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-teal-600 dark:text-teal-400 font-semibold uppercase tracking-wide">Disbursed Items</p>
-              <p className="text-3xl font-bold text-teal-700 dark:text-teal-300 mt-1">{issuedItemCount}</p>
-            </div>
-            <div className="w-10 h-10 rounded-full bg-teal-200 dark:bg-teal-800/50 flex items-center justify-center">
-              <Package size={20} className="text-teal-600 dark:text-teal-400" />
-            </div>
-          </div>
-        </div>
+      )}
 
-        <div className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-900/10 rounded-xl p-4 border-l-4 border-green-500 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-green-600 dark:text-green-400 font-semibold uppercase tracking-wide">Total Issued</p>
-              <p className="text-3xl font-bold text-green-700 dark:text-green-300 mt-1">{issuedTotalCount}</p>
-            </div>
-            <div className="w-10 h-10 rounded-full bg-green-200 dark:bg-green-800/50 flex items-center justify-center">
-              <CheckCircle2 size={20} className="text-green-600 dark:text-green-400" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-900/10 rounded-xl p-4 border-l-4 border-orange-500 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-orange-600 dark:text-orange-400 font-semibold uppercase tracking-wide">Still Pending</p>
-              <p className="text-3xl font-bold text-orange-700 dark:text-orange-300 mt-1">{pendingTotalCount}</p>
-            </div>
-            <div className="w-10 h-10 rounded-full bg-orange-200 dark:bg-orange-800/50 flex items-center justify-center">
-              <AlertCircle size={20} className="text-orange-600 dark:text-orange-400" />
-            </div>
-          </div>
-        </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <MetricCard label="Approved Queue" value={allRows.length} icon={Truck} className="border-slate-200 bg-white text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
+        <MetricCard label="Selected" value={selectedList.length} icon={CheckCircle2} className="border-green-200 bg-green-50 text-green-800 dark:border-green-900/50 dark:bg-green-900/20 dark:text-green-200" />
+        <MetricCard label="Eligible For DN" value={eligibleSelectedRows.length} icon={Download} className="border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-900/20 dark:text-emerald-200" />
+        <MetricCard label="Still Pending" value={pendingTotalCount} icon={AlertCircle} className="border-orange-200 bg-orange-50 text-orange-800 dark:border-orange-900/50 dark:bg-orange-900/20 dark:text-orange-200" />
       </div>
 
-      {/* Filters */}
-      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4 shadow-sm">
-        <div className="flex items-center gap-4 flex-wrap">
-          <div className="flex items-center gap-2">
-            <Truck size={18} className="text-slate-500" />
-            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Disbursement filters</span>
-          </div>
+      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+        <div className="flex flex-wrap items-center gap-3">
+          <Truck size={18} className="text-slate-500" />
+          <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Disbursement filters</span>
           <Combobox
             value={selectedRoute}
             onChange={(value) => {
@@ -552,11 +822,11 @@ Thank you for your partnership with Ceylon Tea Factory
             <input
               type="date"
               value={dateFrom}
-              onChange={(e) => {
+              onChange={event => {
                 setQueueLoading(true)
-                setDateFrom(e.target.value)
+                setDateFrom(event.target.value)
               }}
-              className="bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-green-600"
+              className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-green-600 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-300"
             />
           </label>
           <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
@@ -564,11 +834,11 @@ Thank you for your partnership with Ceylon Tea Factory
             <input
               type="date"
               value={dateTo}
-              onChange={(e) => {
+              onChange={event => {
                 setQueueLoading(true)
-                setDateTo(e.target.value)
+                setDateTo(event.target.value)
               }}
-              className="bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-green-600"
+              className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-green-600 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-300"
             />
           </label>
           {(dateFrom || dateTo || selectedRoute !== 'all') && (
@@ -580,365 +850,80 @@ Thank you for your partnership with Ceylon Tea Factory
                 setDateFrom('')
                 setDateTo('')
               }}
-              className="px-3 py-2 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+              className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
             >
               Clear Filters
             </button>
           )}
+          {issueTab === 'advance' && (
+            <Combobox
+              value={advancePaymentFilter}
+              onChange={setAdvancePaymentFilter}
+              options={[
+                { value: 'all', label: 'All Payment Methods' },
+                { value: 'Cash', label: 'Cash' },
+                { value: 'Bank Transfer', label: 'Bank Transfer' },
+                { value: 'Cheque', label: 'Cheque' },
+                { value: 'unselected', label: 'Not Selected' },
+              ]}
+              className="min-w-48"
+              buttonClassName="bg-slate-50 px-4 py-2 text-sm dark:bg-slate-700"
+            />
+          )}
         </div>
       </div>
 
-      {/* Disbursement Type Tabs */}
       <div className="border-b border-slate-200 dark:border-slate-700">
-        <div className="flex gap-2">
-          <button
-            onClick={() => setIssueTab('advance')}
-            className={`flex items-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-t-lg transition-all border-b-2 ${
-              issueTab === 'advance' 
-                ? 'border-amber-500 text-amber-700 dark:text-amber-400 bg-white dark:bg-slate-800'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            <Banknote size={16} />
-            Advance Disbursement ({pendingAdvancesCount})
-          </button>
-          <button
-            onClick={() => setIssueTab('fertilizer')}
-            className={`flex items-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-t-lg transition-all border-b-2 ${
-              issueTab === 'fertilizer' 
-                ? 'border-emerald-500 text-emerald-700 dark:text-emerald-400 bg-white dark:bg-slate-800'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            <Sprout size={16} />
-            Fertilizer Disbursement ({pendingFertilizersCount})
-          </button>
-          <button
-            onClick={() => setIssueTab('items')}
-            className={`flex items-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-t-lg transition-all border-b-2 ${
-              issueTab === 'items' 
-                ? 'border-teal-500 text-teal-700 dark:text-teal-400 bg-white dark:bg-slate-800'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            <Package size={16} />
-            Item Disbursement ({pendingItemsCount})
-          </button>
+        <div className="flex flex-wrap gap-2">
+          {Object.entries(typeConfig).map(([type, config]) => {
+            const Icon = config.icon
+            const count = { advance: filteredAdvances, fertilizer: filteredFertilizers, items: filteredItems }[type].filter(row => !row.issued).length
+
+            return (
+              <button
+                key={type}
+                type="button"
+                onClick={() => setIssueTab(type)}
+                className={`flex items-center gap-2 rounded-t-lg border-b-2 px-5 py-2.5 text-sm font-semibold transition-colors ${
+                  issueTab === type
+                    ? 'border-green-600 bg-white text-green-700 dark:bg-slate-800 dark:text-green-300'
+                    : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                }`}
+              >
+                <Icon size={16} />
+                {config.label} ({count})
+              </button>
+            )
+          })}
         </div>
       </div>
 
-      {/* Advance Disbursements Table */}
-      {issueTab === 'advance' && (
-        <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden shadow-sm">
-          <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-gradient-to-r from-amber-50 to-white dark:from-amber-900/10 dark:to-transparent">
-            <div className="flex justify-between items-center flex-wrap gap-3">
-              <div>
-                <h3 className="font-semibold text-slate-900 dark:text-white">Pending Advance Disbursements</h3>
-                <p className="text-xs text-slate-500 mt-0.5">{pendingAdvancesCount} requests awaiting disbursement</p>
-              </div>
-              {pendingAdvancesCount > 0 && (
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleBulkPrint('advance', filteredAdvances.filter(i => !i.issued))}
-                    className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-                  >
-                    <Printer size={12} /> Print All ({pendingAdvancesCount})
-                  </button>
-                  <button
-                    onClick={() => handleBulkDownload('advance', filteredAdvances.filter(i => !i.issued))}
-                    className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg bg-green-700 text-white hover:bg-green-800 transition-colors shadow-sm"
-                  >
-                    <Download size={12} /> Download All ({pendingAdvancesCount})
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
-                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide py-3 px-4">RegNo</th>
-                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide py-3 px-4">Supplier Name</th>
-                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide py-3 px-4">Approved Date</th>
-                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide py-3 px-4">Approved Amount</th>
-                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide py-3 px-4">Payment Method</th>
-                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide py-3 px-4">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredAdvances.length === 0 ? (
-                  <tr>
-                    <td colSpan="6" className="text-center py-8 text-slate-500">
-                      <Banknote size={32} className="mx-auto mb-2 opacity-30" />
-                      No advance requests available
-                    </td>
-                  </tr>
-                ) : (
-                  filteredAdvances.map(item => (
-                    <tr key={item.id} className={`border-b border-slate-100 dark:border-slate-700/50 ${item.issued ? 'bg-green-50 dark:bg-green-900/10' : 'hover:bg-slate-50 dark:hover:bg-slate-700/30'}`}>
-                      <td className="py-3 px-4 font-mono font-semibold text-green-700 dark:text-green-400">{item.regNo}</td>
-                      <td className="py-3 px-4 font-medium text-slate-700 dark:text-slate-300">{item.supplierName}</td>
-                      <td className="py-3 px-4 text-slate-600 dark:text-slate-300">{formatDisplayDate(item.approvedDate)}</td>
-                      <td className="py-3 px-4 font-bold text-amber-600 dark:text-amber-400">Rs.{item.approvedAmount.toLocaleString()}</td>
-                      <td className="py-3 px-4">
-                        {item.issued ? (
-                          <StatusBadge status={`issued via ${item.paymentMethod || paymentMethods[item.id] || 'N/A'}`} className="px-2 py-1" />
-                        ) : (
-                          <Combobox
-                            value={paymentMethods[item.id] || ''}
-                            onChange={(value) => updatePaymentMethod(item.id, value)}
-                            options={[
-                              { value: '', label: 'Select Method' },
-                              { value: 'Cash', label: 'Cash' },
-                              { value: 'Bank Transfer', label: 'Bank Transfer' },
-                              { value: 'Cheque', label: 'Cheque' },
-                            ]}
-                            className="min-w-44"
-                            buttonClassName="bg-slate-50 py-1.5 text-sm dark:bg-slate-700"
-                          />
-                        )}
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="flex gap-2">
-                          {!item.issued ? (
-                            <button
-                              onClick={() => handleDisburse('advance', item, paymentMethods[item.id])}
-                              disabled={!paymentMethods[item.id] || issuingKey === `advance-${item.id}`}
-                              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-                                paymentMethods[item.id]
-                                  ? 'bg-amber-600 text-white hover:bg-amber-700 shadow-sm'
-                                  : 'bg-slate-200 text-slate-400 cursor-not-allowed dark:bg-slate-700'
-                              }`}
-                            >
-                              {issuingKey === `advance-${item.id}` ? <RefreshCw size={12} className="animate-spin" /> : <Send size={12} />}
-                              Disburse
-                            </button>
-                          ) : (
-                            <StatusBadge status="issued" className="rounded-lg px-3 py-1.5" />
-                          )}
-                          <button
-                            onClick={() => handlePrint(item, 'advance')}
-                            className="p-1.5 text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-300 dark:hover:bg-slate-700 rounded-lg transition-colors"
-                            title="Print"
-                          >
-                            <Printer size={16} />
-                          </button>
-                          <button
-                            onClick={() => handleDownload(item, 'advance')}
-                            className="p-1.5 text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-300 dark:hover:bg-slate-700 rounded-lg transition-colors"
-                            title="Download"
-                          >
-                            <Download size={16} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-          <DisbursementTableSummary items={filteredAdvances} type="advance" />
-        </div>
-      )}
+      <DisbursementTable
+        rows={currentRows}
+        type={issueTab}
+        selectedRows={selectedRows}
+        paymentMethods={paymentMethods}
+        issuingKey={issuingKey}
+        onSelect={selectRow}
+        onSelectAll={selectAllRows}
+        onPaymentMethod={updatePaymentMethod}
+        onIssueTransfer={issueBankTransfer}
+      />
 
-      {/* Fertilizer Disbursements Table */}
-      {issueTab === 'fertilizer' && (
-        <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden shadow-sm">
-          <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-gradient-to-r from-emerald-50 to-white dark:from-emerald-900/10 dark:to-transparent">
-            <div className="flex justify-between items-center flex-wrap gap-3">
-              <div>
-                <h3 className="font-semibold text-slate-900 dark:text-white">Pending Fertilizer Disbursements</h3>
-                <p className="text-xs text-slate-500 mt-0.5">{pendingFertilizersCount} requests awaiting disbursement</p>
-              </div>
-              {pendingFertilizersCount > 0 && (
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleBulkPrint('fertilizer', filteredFertilizers.filter(i => !i.issued))}
-                    className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-                  >
-                    <Printer size={12} /> Print All ({pendingFertilizersCount})
-                  </button>
-                  <button
-                    onClick={() => handleBulkDownload('fertilizer', filteredFertilizers.filter(i => !i.issued))}
-                    className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg bg-green-700 text-white hover:bg-green-800 transition-colors shadow-sm"
-                  >
-                    <Download size={12} /> Download All ({pendingFertilizersCount})
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
-                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide py-3 px-4">RegNo</th>
-                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide py-3 px-4">Supplier Name</th>
-                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide py-3 px-4">Approved Date</th>
-                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide py-3 px-4">Fertilizer Type</th>
-                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide py-3 px-4">Approved Qty</th>
-                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide py-3 px-4">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredFertilizers.length === 0 ? (
-                  <tr>
-                    <td colSpan="6" className="text-center py-8 text-slate-500">
-                      <Sprout size={32} className="mx-auto mb-2 opacity-30" />
-                      No fertilizer requests available
-                    </td>
-                  </tr>
-                ) : (
-                  filteredFertilizers.map(item => (
-                    <tr key={item.id} className={`border-b border-slate-100 dark:border-slate-700/50 ${item.issued ? 'bg-green-50 dark:bg-green-900/10' : 'hover:bg-slate-50 dark:hover:bg-slate-700/30'}`}>
-                      <td className="py-3 px-4 font-mono font-semibold text-green-700 dark:text-green-400">{item.regNo}</td>
-                      <td className="py-3 px-4 font-medium text-slate-700 dark:text-slate-300">{item.supplierName}</td>
-                      <td className="py-3 px-4 text-slate-600 dark:text-slate-300">{formatDisplayDate(item.approvedDate)}</td>
-                      <td className="py-3 px-4">
-                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 text-xs font-medium">
-                          <Sprout size={10} /> {item.fertilizerType}
-                        </span>
-                       </td>
-                      <td className="py-3 px-4 font-medium text-slate-700 dark:text-slate-300">{item.approvedQty} {item.unit}</td>
-                      <td className="py-3 px-4">
-                        <div className="flex gap-2">
-                          {!item.issued ? (
-                            <button
-                              onClick={() => handleDisburse('fertilizer', item, 'Physical Delivery')}
-                              disabled={issuingKey === `fertilizer-${item.id}`}
-                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-all shadow-sm disabled:cursor-not-allowed disabled:opacity-70"
-                            >
-                              {issuingKey === `fertilizer-${item.id}` ? <RefreshCw size={12} className="animate-spin" /> : <Send size={12} />}
-                              Disburse
-                            </button>
-                          ) : (
-                            <StatusBadge status="issued" className="rounded-lg px-3 py-1.5" />
-                          )}
-                          <button
-                            onClick={() => handlePrint(item, 'fertilizer')}
-                            className="p-1.5 text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-300 dark:hover:bg-slate-700 rounded-lg transition-colors"
-                            title="Print"
-                          >
-                            <Printer size={16} />
-                          </button>
-                          <button
-                            onClick={() => handleDownload(item, 'fertilizer')}
-                            className="p-1.5 text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-300 dark:hover:bg-slate-700 rounded-lg transition-colors"
-                            title="Download"
-                          >
-                            <Download size={16} />
-                          </button>
-                        </div>
-                       </td>
-                     </tr>
-                  ))
-                )}
-             </tbody>
-            </table>
-          </div>
-          <DisbursementTableSummary items={filteredFertilizers} type="fertilizer" />
-        </div>
-      )}
+      <div className="rounded-xl border border-slate-200 bg-white px-5 py-4 text-sm text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+        <span className="font-semibold text-slate-900 dark:text-white">{issuedTotalCount}</span> records already issued or dispatched. Cash and cheque advances, fertilizer, and item records are saved to delivery notes; bank transfers stay outside the delivery note.
+      </div>
 
-      {/* Item Disbursements Table */}
-      {issueTab === 'items' && (
-        <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden shadow-sm">
-          <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-gradient-to-r from-teal-50 to-white dark:from-teal-900/10 dark:to-transparent">
-            <div className="flex justify-between items-center flex-wrap gap-3">
-              <div>
-                <h3 className="font-semibold text-slate-900 dark:text-white">Pending Item Disbursements</h3>
-                <p className="text-xs text-slate-500 mt-0.5">{pendingItemsCount} requests awaiting disbursement</p>
-              </div>
-              {pendingItemsCount > 0 && (
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleBulkPrint('item', filteredItems.filter(i => !i.issued))}
-                    className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-                  >
-                    <Printer size={12} /> Print All ({pendingItemsCount})
-                  </button>
-                  <button
-                    onClick={() => handleBulkDownload('item', filteredItems.filter(i => !i.issued))}
-                    className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg bg-green-700 text-white hover:bg-green-800 transition-colors shadow-sm"
-                  >
-                    <Download size={12} /> Download All ({pendingItemsCount})
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
-                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide py-3 px-4">RegNo</th>
-                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide py-3 px-4">Supplier Name</th>
-                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide py-3 px-4">Approved Date</th>
-                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide py-3 px-4">Item Type</th>
-                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide py-3 px-4">Approved Qty</th>
-                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide py-3 px-4">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredItems.length === 0 ? (
-                  <tr>
-                    <td colSpan="6" className="text-center py-8 text-slate-500">
-                      <Package size={32} className="mx-auto mb-2 opacity-30" />
-                      No item requests available
-                    </td>
-                  </tr>
-                ) : (
-                  filteredItems.map(item => (
-                    <tr key={item.id} className={`border-b border-slate-100 dark:border-slate-700/50 ${item.issued ? 'bg-green-50 dark:bg-green-900/10' : 'hover:bg-slate-50 dark:hover:bg-slate-700/30'}`}>
-                      <td className="py-3 px-4 font-mono font-semibold text-green-700 dark:text-green-400">{item.regNo}</td>
-                      <td className="py-3 px-4 font-medium text-slate-700 dark:text-slate-300">{item.supplierName}</td>
-                      <td className="py-3 px-4 text-slate-600 dark:text-slate-300">{formatDisplayDate(item.approvedDate)}</td>
-                      <td className="py-3 px-4">
-                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400 text-xs font-medium">
-                          <Package size={10} /> {item.itemType}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 font-medium text-slate-700 dark:text-slate-300">{item.approvedQty} {item.unit}</td>
-                      <td className="py-3 px-4">
-                        <div className="flex gap-2">
-                          {!item.issued ? (
-                            <button
-                              onClick={() => handleDisburse('items', item, 'Physical Delivery')}
-                              disabled={issuingKey === `items-${item.id}`}
-                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-teal-600 text-white hover:bg-teal-700 transition-all shadow-sm disabled:cursor-not-allowed disabled:opacity-70"
-                            >
-                              {issuingKey === `items-${item.id}` ? <RefreshCw size={12} className="animate-spin" /> : <Send size={12} />}
-                              Disburse
-                            </button>
-                          ) : (
-                            <StatusBadge status="issued" className="rounded-lg px-3 py-1.5" />
-                          )}
-                          <button
-                            onClick={() => handlePrint(item, 'item')}
-                            className="p-1.5 text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-300 dark:hover:bg-slate-700 rounded-lg transition-colors"
-                            title="Print"
-                          >
-                            <Printer size={16} />
-                          </button>
-                          <button
-                            onClick={() => handleDownload(item, 'item')}
-                            className="p-1.5 text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-300 dark:hover:bg-slate-700 rounded-lg transition-colors"
-                            title="Download"
-                          >
-                            <Download size={16} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-          <DisbursementTableSummary items={filteredItems} type="items" />
-        </div>
+      {showReview && (
+        <SelectedReviewModal
+          borrower={borrower}
+          eligibleRows={eligibleSelectedRows}
+          excludedRows={excludedSelectedRows}
+          generating={generating}
+          onBorrowerChange={(field, value) => setBorrower(prev => ({ ...prev, [field]: value }))}
+          onClose={() => setShowReview(false)}
+          onGenerate={generateDeliveryNote}
+        />
       )}
     </div>
   )

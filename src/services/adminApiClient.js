@@ -62,10 +62,24 @@ export async function adminApiRequest(path, options = {}) {
     headers.Authorization = `Bearer ${token}`
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...options,
-    headers,
-  })
+  let response
+
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      ...options,
+      headers,
+    })
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      throw error
+    }
+
+    const connectionError = new Error(
+      'Unable to connect to the API server. Start the ASP.NET Core backend or update VITE_API_PROXY_TARGET in .env, then restart Vite.'
+    )
+    connectionError.cause = error
+    throw connectionError
+  }
 
   const data = await parseResponseBody(response)
 
@@ -91,7 +105,7 @@ export async function adminApiRequest(path, options = {}) {
     error.status = response.status
     error.data = data
 
-    if (response.status === 401 || response.status === 403) {
+    if (response.status === 401) {
       adminAuthStorage.removeToken()
       window.dispatchEvent(new Event('dashboard-admin-auth-expired'))
     }

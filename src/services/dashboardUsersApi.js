@@ -1,4 +1,7 @@
+import { env } from '../config/env'
+import { systemUsers, userRoles } from '../data/mockData'
 import { adminApiRequest } from './adminApiClient'
+import { shouldUseApi } from './apiClient'
 
 const DASHBOARD_USER_PASSWORDS_KEY = 'dashboardUserPasswords'
 
@@ -98,6 +101,43 @@ const buildUserPayload = ({ fullName, email, username, password, phoneNo, role, 
   avatar: avatar || null,
 })
 
+const buildMockResponse = ({ search = '', status = '' } = {}) => {
+  const term = String(search || '').trim().toLowerCase()
+  const activeStatus = String(status || '').trim().toLowerCase()
+  const users = systemUsers
+    .map(normalizeUser)
+    .filter(user => !activeStatus || activeStatus === 'all' || user.status === activeStatus)
+    .filter(user => (
+      !term ||
+      user.name.toLowerCase().includes(term) ||
+      user.username.toLowerCase().includes(term) ||
+      user.email.toLowerCase().includes(term) ||
+      user.role.toLowerCase().includes(term)
+    ))
+    .map(mergeSavedPassword)
+
+  return {
+    summary: {
+      totalAdministrators: users.length,
+      activeUsers: users.filter(user => user.status === 'active').length,
+      inactiveUsers: users.filter(user => user.status !== 'active').length,
+    },
+    users,
+    roles: userRoles.map(role => role.name),
+  }
+}
+
+const withMockFallback = async (request, mockFactory) => {
+  if (!shouldUseApi()) return mockFactory()
+
+  try {
+    return await request()
+  } catch (error) {
+    if (error.name === 'AbortError' || !env.enableMockData) throw error
+    return mockFactory()
+  }
+}
+
 export const dashboardUsersApi = {
   async list({ search = '', status = '', signal } = {}) {
     const params = new URLSearchParams()
@@ -105,39 +145,70 @@ export const dashboardUsersApi = {
     if (status && status !== 'all') params.set('status', status)
 
     const query = params.toString()
-    const response = await adminApiRequest(`/api/DashboardUsers${query ? `?${query}` : ''}`, {
-      method: 'GET',
-      signal,
-    })
+    return withMockFallback(
+      async () => {
+        const response = await adminApiRequest(`/api/DashboardUsers${query ? `?${query}` : ''}`, {
+          method: 'GET',
+          signal,
+        })
 
-    return normalizeResponse(response)
+        return normalizeResponse(response)
+      },
+      () => buildMockResponse({ search, status })
+    )
   },
 
   async create(form) {
-    const response = await adminApiRequest('/api/DashboardUsers', {
-      method: 'POST',
-      body: JSON.stringify(buildUserPayload(form)),
-    })
+    return withMockFallback(
+      async () => {
+        const response = await adminApiRequest('/api/DashboardUsers', {
+          method: 'POST',
+          body: JSON.stringify(buildUserPayload(form)),
+        })
 
-    return rememberPassword(normalizeUser(response), form.password)
+        return rememberPassword(normalizeUser(response), form.password)
+      },
+      () => rememberPassword(normalizeUser({
+        ...form,
+        id: Date.now(),
+        name: form.fullName,
+        createdAt: new Date().toISOString(),
+      }), form.password)
+    )
   },
 
   async update(id, form) {
-    const response = await adminApiRequest(`/api/DashboardUsers/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(buildUserPayload(form, { editing: true })),
-    })
+    return withMockFallback(
+      async () => {
+        const response = await adminApiRequest(`/api/DashboardUsers/${id}`, {
+          method: 'PUT',
+          body: JSON.stringify(buildUserPayload(form, { editing: true })),
+        })
 
-    return rememberPassword(normalizeUser(response), form.password)
+        return rememberPassword(normalizeUser(response), form.password)
+      },
+      () => rememberPassword(normalizeUser({
+        ...form,
+        id,
+        name: form.fullName,
+      }), form.password)
+    )
   },
 
   async delete(id) {
-    const response = await adminApiRequest(`/api/DashboardUsers/${id}`, {
-      method: 'DELETE',
-    })
+    return withMockFallback(
+      async () => {
+        const response = await adminApiRequest(`/api/DashboardUsers/${id}`, {
+          method: 'DELETE',
+        })
 
-    forgetPassword(id)
-
-    return response
+        forgetPassword(id)
+        return response
+      },
+      () => {
+        forgetPassword(id)
+        return null
+      }
+    )
   },
 }

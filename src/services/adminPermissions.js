@@ -11,6 +11,8 @@ export const PERMISSIONS = {
 }
 
 const toArray = value => Array.isArray(value) ? value : []
+const normalizeKey = value => String(value || '').trim().toLowerCase()
+const truthyPermission = value => value === true || String(value).toLowerCase() === 'true'
 
 export function hasPermissionPayload(user) {
   if (!user) return false
@@ -53,6 +55,34 @@ export function hasAdminPermission(user, permissionCandidates) {
 
     return moduleSubs.includes(candidate) || moduleSubs.includes(actionName)
   })
+}
+
+export function hasExplicitAdminPermission(user, permissionCandidates) {
+  if (!user) return false
+  if (user.isSuperAdmin) return true
+
+  const candidates = new Set(toArray(permissionCandidates).map(normalizeKey).filter(Boolean))
+  if (candidates.size === 0) return false
+
+  const permissions = new Set(normalizePermissionList(user).map(normalizeKey))
+  if ([...candidates].some(permission => permissions.has(permission))) return true
+
+  const modulePermissions = user.modulePermissions || user.ModulePermissions || {}
+  if (Object.entries(modulePermissions).some(([permission, allowed]) => (
+    candidates.has(normalizeKey(permission)) && truthyPermission(allowed)
+  ))) {
+    return true
+  }
+
+  const subPermissions = user.subPermissions || user.SubPermissions || {}
+  return Object.entries(subPermissions).some(([moduleName, values]) => (
+    toArray(values).some(value => {
+      const normalizedValue = normalizeKey(value)
+      const fullyQualified = `${normalizeKey(moduleName)}.${normalizedValue}`
+
+      return candidates.has(normalizedValue) || candidates.has(fullyQualified)
+    })
+  ))
 }
 
 export function canAccessRoute(user, routePermission) {
