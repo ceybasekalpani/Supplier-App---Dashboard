@@ -15,16 +15,43 @@ const getValue = (source, camelKey, pascalKey = camelKey[0].toUpperCase() + came
 const normalizeIssuedType = (issuedType) => {
   const value = String(issuedType || '').trim().toLowerCase()
 
-  if (value === 'item') return 'items'
-  if (value === 'fertilizers') return 'fertilizer'
+  if (value.includes('advance')) return 'advance'
+  if (value.includes('fertilizer') || value.includes('fertiliser')) return 'fertilizer'
+  if (value === 'item' || value === 'items' || value.includes('item')) return 'items'
 
   return value
+}
+
+const isKnownIssuedType = (value) => ['advance', 'fertilizer', 'fertilizers', 'fertiliser', 'fertilisers', 'item', 'items'].includes(String(value || '').trim().toLowerCase())
+
+const fertilizerNameHints = ['urea', 'compost', 'potash', 'tsp', 'mop', 'npk', 'dolomite', 'phosphate', 'fertilizer', 'fertiliser']
+
+const looksLikeFertilizerName = (value) => {
+  const text = String(value || '').trim().toLowerCase()
+  return fertilizerNameHints.some(hint => text.includes(hint))
+}
+
+const inferIssuedType = (row, fallbackType = '') => {
+  const issuedType = getValue(row, 'issuedType') || getValue(row, 'disbursementType')
+  const genericType = getValue(row, 'type')
+  const itemType = getValue(row, 'itemType')
+
+  if (issuedType) return normalizeIssuedType(issuedType)
+  if (isKnownIssuedType(genericType)) return normalizeIssuedType(genericType)
+  if (isKnownIssuedType(itemType)) return normalizeIssuedType(itemType)
+  if (getValue(row, 'fertilizerType') || getValue(row, 'fertilizerName')) return 'fertilizer'
+  if (looksLikeFertilizerName(itemType) || looksLikeFertilizerName(genericType) || looksLikeFertilizerName(getValue(row, 'itemName'))) return 'fertilizer'
+  if (getValue(row, 'itemName') || itemType || getValue(row, 'itemTypeName')) return 'items'
+
+  return normalizeIssuedType(fallbackType)
 }
 
 const dateOnly = (value) => {
   if (!value) return ''
   return String(value).slice(0, 10)
 }
+
+const dateTime = (value) => value ? String(value) : ''
 
 const normalizeQueueRow = (row, fallbackType = '') => ({
   id: Number(getValue(row, 'id') || 0),
@@ -95,20 +122,28 @@ const withMockFallback = async (request, mockFactory) => {
 
 const normalizeTrackingRow = (row) => ({
   id: Number(getValue(row, 'id') || 0),
-  issuedType: normalizeIssuedType(getValue(row, 'issuedType')),
+  issuedType: inferIssuedType(row),
   requestId: Number(getValue(row, 'requestId') || 0),
   requestNo: String(getValue(row, 'requestNo') || ''),
   regNo: String(getValue(row, 'regNo') || ''),
   supplierName: String(getValue(row, 'supplierName') || ''),
   route: String(getValue(row, 'route') || ''),
   issuedDetails: String(getValue(row, 'issuedDetails') || ''),
-  itemName: getValue(row, 'itemName') || '',
+  itemName: getValue(row, 'itemName') || getValue(row, 'fertilizerType') || getValue(row, 'fertilizerName') || getValue(row, 'itemTypeName') || (!isKnownIssuedType(getValue(row, 'itemType')) ? getValue(row, 'itemType') : '') || (!isKnownIssuedType(getValue(row, 'type')) ? getValue(row, 'type') : '') || '',
+  fertilizerType: getValue(row, 'fertilizerType') || getValue(row, 'fertilizerName') || '',
+  itemType: getValue(row, 'itemType') || getValue(row, 'itemTypeName') || '',
   amount: getValue(row, 'amount') == null ? null : Number(getValue(row, 'amount')),
   qty: getValue(row, 'qty') == null ? null : Number(getValue(row, 'qty')),
   unit: String(getValue(row, 'unit') || ''),
   requestDate: dateOnly(getValue(row, 'requestDate')),
   approvedDate: dateOnly(getValue(row, 'approvedDate')),
-  issueDate: dateOnly(getValue(row, 'issueDate')),
+  approvedBy: getValue(row, 'approvedBy') || getValue(row, 'checkedBy') || getValue(row, 'reviewedBy') || '',
+  approvedByName: getValue(row, 'approvedByName') || getValue(row, 'checkedByName') || getValue(row, 'reviewedByName') || '',
+  approvedByUserName: getValue(row, 'approvedByUserName') || getValue(row, 'approvedUserName') || getValue(row, 'checkedByUserName') || '',
+  checkedBy: getValue(row, 'checkedBy') || getValue(row, 'approvedBy') || '',
+  checkedByName: getValue(row, 'checkedByName') || getValue(row, 'approvedByName') || '',
+  checkedByUserName: getValue(row, 'checkedByUserName') || getValue(row, 'approvedByUserName') || getValue(row, 'approvedUserName') || '',
+  issueDate: dateTime(getValue(row, 'issueDate')),
   method: String(getValue(row, 'method') || ''),
   currentStatus: String(getValue(row, 'currentStatus') || 'awaiting').trim().toLowerCase(),
   completedDate: dateOnly(getValue(row, 'completedDate')),
@@ -116,21 +151,35 @@ const normalizeTrackingRow = (row) => ({
   completedDevice: getValue(row, 'completedDevice') || '',
   deliveryNoteId: getValue(row, 'deliveryNoteId') == null ? null : Number(getValue(row, 'deliveryNoteId')),
   deliveryNoteNo: getValue(row, 'deliveryNoteNo') || '',
-  dispatchedAt: dateOnly(getValue(row, 'dispatchedAt')),
+  dispatchedAt: dateTime(getValue(row, 'dispatchedAt') || getValue(row, 'dispatchDate')),
 })
 
 const normalizeDeliveryNoteDetail = (row) => ({
   id: Number(getValue(row, 'id') || 0),
+  requestNo: String(getValue(row, 'requestNo') || ''),
   supplierRegNo: String(getValue(row, 'supplierRegNo') || ''),
   supplierName: String(getValue(row, 'supplierName') || ''),
   routeName: String(getValue(row, 'routeName') || ''),
-  disbursementRecordId: Number(getValue(row, 'disbursementRecordId') || 0),
+  disbursementRecordId: Number(getValue(row, 'disbursementRecordId') || getValue(row, 'trackingId') || getValue(row, 'trackingRecordId') || getValue(row, 'disbursementTrackingId') || 0),
   requestId: Number(getValue(row, 'requestId') || 0),
-  itemType: normalizeIssuedType(getValue(row, 'itemType')),
+  issuedType: inferIssuedType(row),
+  issuedDetails: String(getValue(row, 'issuedDetails') || ''),
+  itemName: getValue(row, 'itemName') || getValue(row, 'fertilizerType') || getValue(row, 'fertilizerName') || getValue(row, 'itemTypeName') || (!isKnownIssuedType(getValue(row, 'itemType')) ? getValue(row, 'itemType') : '') || (!isKnownIssuedType(getValue(row, 'type')) ? getValue(row, 'type') : '') || '',
+  fertilizerType: getValue(row, 'fertilizerType') || getValue(row, 'fertilizerName') || '',
+  itemType: getValue(row, 'itemType') || getValue(row, 'itemTypeName') || '',
   amount: getValue(row, 'amount') == null ? null : Number(getValue(row, 'amount')),
   quantity: getValue(row, 'quantity') == null ? null : Number(getValue(row, 'quantity')),
   unit: getValue(row, 'unit') || '',
   paymentType: getValue(row, 'paymentType') || '',
+  approvedBy: getValue(row, 'approvedBy') || getValue(row, 'checkedBy') || getValue(row, 'reviewedBy') || '',
+  approvedByName: getValue(row, 'approvedByName') || getValue(row, 'checkedByName') || getValue(row, 'reviewedByName') || '',
+  approvedByUserName: getValue(row, 'approvedByUserName') || getValue(row, 'approvedUserName') || getValue(row, 'checkedByUserName') || '',
+  checkedBy: getValue(row, 'checkedBy') || getValue(row, 'approvedBy') || '',
+  checkedByName: getValue(row, 'checkedByName') || getValue(row, 'approvedByName') || '',
+  checkedByUserName: getValue(row, 'checkedByUserName') || getValue(row, 'approvedByUserName') || getValue(row, 'approvedUserName') || '',
+  issueDate: dateTime(getValue(row, 'issueDate') || getValue(row, 'issueAt')),
+  dispatchedAt: dateTime(getValue(row, 'dispatchedAt') || getValue(row, 'dispatchDate')),
+  currentStatus: String(getValue(row, 'currentStatus') || '').trim().toLowerCase(),
   status: String(getValue(row, 'status') || '').trim().toLowerCase(),
   supplierSignatureReceived: Boolean(getValue(row, 'supplierSignatureReceived')),
   remarks: getValue(row, 'remarks') || '',
@@ -255,8 +304,9 @@ export const disbursementApi = {
             row.issuedDetails.toLowerCase().includes(term)
         })
         .filter(row => {
-          if (fromDate && row.issueDate < fromDate) return false
-          if (toDate && row.issueDate > toDate) return false
+          const rowDate = dateOnly(row.issueDate)
+          if (fromDate && rowDate < fromDate) return false
+          if (toDate && rowDate > toDate) return false
           return true
         })
     )
