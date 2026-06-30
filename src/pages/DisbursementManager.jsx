@@ -28,6 +28,7 @@ const typeConfig = {
 const paymentOptions = [
   { value: '', label: 'Select Method' },
   { value: 'Cash', label: 'Cash' },
+  { value: 'Account Transfer', label: 'Account Transfer' },
   { value: 'Bank Transfer', label: 'Bank Transfer' },
   { value: 'Cheque', label: 'Cheque' },
 ]
@@ -55,6 +56,8 @@ const isDeliveryNoteEligible = (row, paymentMethods) => (
   row.issuedType === 'fertilizer' || row.issuedType === 'items' || isPhysicalAdvance(row, paymentMethods)
 )
 
+const isTransferAdvanceMethod = (method) => ['Account Transfer', 'Bank Transfer'].includes(method)
+
 const getRowLabel = (row) => {
   if (row.issuedType === 'advance') return 'Advance'
   if (row.issuedType === 'fertilizer') return row.fertilizerType || 'Fertilizer'
@@ -65,6 +68,26 @@ const getRowValue = (row) => {
   if (row.issuedType === 'advance') return formatCurrency(row.approvedAmount)
   return formatQuantity(row.approvedQty, row.unit)
 }
+
+const getReportPaymentMethod = (row, paymentMethods) => {
+  if (row.issuedType !== 'advance') return row.paymentMethod || 'Physical Delivery'
+  return paymentMethods[row.id] || row.paymentMethod || 'Not Selected'
+}
+
+const getReportSupplier = (row) => (
+  row.route ? `${row.supplierName} / ${row.route}` : row.supplierName
+)
+
+const getManagementStatus = (row) => {
+  const trackingStatus = String(row.trackingStatus || '').trim().toLowerCase()
+  if (trackingStatus === 'issued') return 'dispatched'
+  if (trackingStatus) return trackingStatus
+  return row.issued ? 'dispatched' : 'approved'
+}
+
+const matchesStatusFilter = (row, statusFilter) => (
+  !statusFilter || statusFilter === 'all' || getManagementStatus(row) === statusFilter
+)
 
 function Toast({ type, message }) {
   if (!message) return null
@@ -95,12 +118,23 @@ function MetricCard({ label, value, icon: Icon, className }) {
 function SelectedReviewModal({
   borrower,
   eligibleRows,
-  excludedRows,
   generating,
   onBorrowerChange,
   onClose,
   onGenerate,
 }) {
+  const focusNextField = (event) => {
+    if (event.key !== 'Enter') return
+
+    event.preventDefault()
+
+    const fields = Array.from(event.currentTarget.closest('[data-review-fields]')?.querySelectorAll('[data-review-field]') || [])
+    const currentIndex = fields.indexOf(event.currentTarget)
+    const nextField = fields[currentIndex + 1]
+
+    if (nextField) nextField.focus()
+  }
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm"
@@ -113,7 +147,6 @@ function SelectedReviewModal({
             <h3 className="mt-1 text-lg font-bold text-slate-900 dark:text-white">Review selected disbursements</h3>
             <p className="text-sm text-slate-500 dark:text-slate-400">
               {eligibleRows.length} record{eligibleRows.length === 1 ? '' : 's'} will be dispatched
-              {excludedRows.length > 0 ? `, ${excludedRows.length} bank transfer advance${excludedRows.length === 1 ? '' : 's'} excluded` : ''}
             </p>
           </div>
           <button
@@ -127,36 +160,44 @@ function SelectedReviewModal({
         </div>
 
         <div className="max-h-[75vh] overflow-y-auto p-5">
-          <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-4" data-review-fields>
             <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">
               Borrower name
               <input
+                data-review-field
                 value={borrower.borrowerName}
                 onChange={event => onBorrowerChange('borrowerName', event.target.value)}
+                onKeyDown={focusNextField}
                 className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-green-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
               />
             </label>
             <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">
               Borrower role
               <input
+                data-review-field
                 value={borrower.borrowerRole}
                 onChange={event => onBorrowerChange('borrowerRole', event.target.value)}
+                onKeyDown={focusNextField}
                 className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-green-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
               />
             </label>
             <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">
               Vehicle no
               <input
+                data-review-field
                 value={borrower.vehicleNo}
                 onChange={event => onBorrowerChange('vehicleNo', event.target.value)}
+                onKeyDown={focusNextField}
                 className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-green-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
               />
             </label>
             <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">
               Route
               <input
+                data-review-field
                 value={borrower.routeName}
                 onChange={event => onBorrowerChange('routeName', event.target.value)}
+                onKeyDown={focusNextField}
                 className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-green-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
               />
             </label>
@@ -172,7 +213,7 @@ function SelectedReviewModal({
             />
           </label>
 
-          <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
+          <div className="mt-5">
             <section className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
               <div className="border-b border-slate-200 bg-green-50 px-4 py-3 dark:border-slate-700 dark:bg-green-900/10">
                 <h4 className="text-sm font-bold text-slate-900 dark:text-white">Included in delivery note</h4>
@@ -204,21 +245,6 @@ function SelectedReviewModal({
                     ))}
                   </tbody>
                 </table>
-              </div>
-            </section>
-
-            <section className="rounded-xl border border-amber-200 bg-amber-50/60 p-4 dark:border-amber-900/50 dark:bg-amber-900/10">
-              <h4 className="text-sm font-bold text-slate-900 dark:text-white">Excluded advances</h4>
-              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Cash and cheque advances are included. Bank transfers are issued outside the delivery note.</p>
-              <div className="mt-3 space-y-2">
-                {excludedRows.length === 0 ? (
-                  <p className="rounded-lg bg-white px-3 py-3 text-sm text-slate-500 ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700">None</p>
-                ) : excludedRows.map(row => (
-                  <div key={rowKey(row.issuedType, row.id)} className="rounded-lg bg-white px-3 py-2 text-sm ring-1 ring-amber-200 dark:bg-slate-800 dark:ring-amber-900/50">
-                    <p className="font-semibold text-slate-900 dark:text-white">{row.supplierName}</p>
-                    <p className="text-xs text-slate-500">{formatCurrency(row.approvedAmount)} / {row.method}</p>
-                  </div>
-                ))}
               </div>
             </section>
           </div>
@@ -322,13 +348,12 @@ function DisbursementTable({
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Details</th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Method</th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Actions</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan="8" className="px-4 py-10 text-center text-slate-500">
+                <td colSpan="7" className="px-4 py-10 text-center text-slate-500">
                   <Icon size={32} className="mx-auto mb-2 opacity-30" />
                   No {config.label.toLowerCase()} requests available
                 </td>
@@ -338,6 +363,7 @@ function DisbursementTable({
               const selected = Boolean(selectedRows[key])
               const method = type === 'advance' ? paymentMethods[row.id] : 'Physical Delivery'
               const canSelect = !row.issued && (type !== 'advance' || Boolean(method))
+              const status = getManagementStatus(row)
 
               return (
                 <tr key={key} className={`border-b border-slate-100 transition-colors dark:border-slate-700/50 ${row.issued ? 'bg-green-50 dark:bg-green-900/10' : 'hover:bg-slate-50 dark:hover:bg-slate-700/30'}`}>
@@ -362,36 +388,32 @@ function DisbursementTable({
                   </td>
                   <td className="px-4 py-3">
                     {type === 'advance' && !row.issued ? (
-                      <Combobox
-                        value={paymentMethods[row.id] || ''}
-                        onChange={(value) => onPaymentMethod(row.id, value)}
-                        options={paymentOptions}
-                        className="min-w-44"
-                        buttonClassName="bg-slate-50 py-1.5 text-sm dark:bg-slate-700"
-                      />
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Combobox
+                          value={paymentMethods[row.id] || ''}
+                          onChange={(value) => onPaymentMethod(row.id, value)}
+                          options={paymentOptions}
+                          className="min-w-44"
+                          buttonClassName="bg-slate-50 py-1.5 text-sm dark:bg-slate-700"
+                        />
+                        {isTransferAdvanceMethod(method) && (
+                          <button
+                            type="button"
+                            onClick={() => onIssueTransfer(row)}
+                            disabled={issuingKey === key}
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-70"
+                          >
+                            {issuingKey === key ? <RefreshCw size={12} className="animate-spin" /> : <Send size={12} />}
+                            Dispatch Transfer
+                          </button>
+                        )}
+                      </div>
                     ) : (
                       <span className="text-slate-600 dark:text-slate-300">{row.paymentMethod || method}</span>
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    <StatusBadge status={row.trackingStatus || (row.issued ? 'issued' : 'approved')} className="px-2.5 py-1" />
-                  </td>
-                  <td className="px-4 py-3">
-                    {type === 'advance' && method === 'Bank Transfer' && !row.issued ? (
-                      <button
-                        type="button"
-                        onClick={() => onIssueTransfer(row)}
-                        disabled={issuingKey === key}
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-70"
-                      >
-                        {issuingKey === key ? <RefreshCw size={12} className="animate-spin" /> : <Send size={12} />}
-                        Issue Transfer
-                      </button>
-                    ) : row.issued ? (
-                      <StatusBadge status="issued" className="rounded-lg px-3 py-1.5" />
-                    ) : (
-                      <span className="text-xs text-slate-500">Select for DN</span>
-                    )}
+                    <StatusBadge status={status} className="px-2.5 py-1" />
                   </td>
                 </tr>
               )
@@ -407,6 +429,7 @@ export default function DisbursementManager() {
   const [selectedRoute, setSelectedRoute] = useState('all')
   const [issueTab, setIssueTab] = useState('advance')
   const [advancePaymentFilter, setAdvancePaymentFilter] = useState('all')
+  const [statusFilter, setStatusFilter] = useState('approved')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [paymentMethods, setPaymentMethods] = useState({})
@@ -483,7 +506,6 @@ export default function DisbursementManager() {
   ), [allRows, paymentMethods, selectedRows])
 
   const eligibleSelectedRows = selectedList.filter(row => isDeliveryNoteEligible(row, paymentMethods))
-  const excludedSelectedRows = selectedList.filter(row => row.issuedType === 'advance' && !isPhysicalAdvance(row, paymentMethods))
 
   const routeOptions = useMemo(() => ([
     { id: 'all', name: 'All Routes' },
@@ -541,6 +563,7 @@ export default function DisbursementManager() {
 
   const issueBankTransfer = async (row) => {
     const key = rowKey('advance', row.id)
+    const method = paymentMethods[row.id] || row.paymentMethod || 'Bank Transfer'
     setIssuingKey(key)
     setShowError(null)
 
@@ -548,12 +571,18 @@ export default function DisbursementManager() {
       const tracking = await disbursementApi.issue({
         issuedType: 'advance',
         requestId: row.id,
-        method: 'Bank Transfer',
+        method,
       })
 
       setAdvancesState(previous => previous.map(item => (
         item.id === row.id
-          ? { ...item, issued: true, paymentMethod: tracking.method, trackingStatus: tracking.currentStatus }
+          ? {
+              ...item,
+              issued: true,
+              paymentMethod: tracking.method || method,
+              trackingStatus: 'dispatched',
+              trackingId: tracking.id,
+            }
           : item
       )))
       setSelectedRows(previous => {
@@ -561,10 +590,10 @@ export default function DisbursementManager() {
         delete next[key]
         return next
       })
-      setShowSuccess(`Bank transfer issued for ${row.supplierName}`)
+      setShowSuccess(`${method} dispatched for ${row.supplierName}`)
       setTimeout(() => setShowSuccess(null), 3000)
     } catch (error) {
-      setShowError(error.message || 'Unable to issue bank transfer')
+      setShowError(error.message || `Unable to dispatch ${method.toLowerCase()}`)
       setTimeout(() => setShowError(null), 3000)
     } finally {
       setIssuingKey('')
@@ -597,12 +626,18 @@ export default function DisbursementManager() {
       return
     }
 
+    if (eligibleSelectedRows.length === 0) {
+      setShowError('Select at least one delivery-note eligible record')
+      setTimeout(() => setShowError(null), 3000)
+      return
+    }
+
     setGenerating(true)
     setShowError(null)
 
     try {
       const deliveryNote = await disbursementApi.generateDeliveryNote({
-        records: selectedList.map(row => ({
+        records: eligibleSelectedRows.map(row => ({
           issuedType: row.issuedType,
           requestId: row.id,
           method: row.method,
@@ -615,11 +650,21 @@ export default function DisbursementManager() {
         methods[rowKey(detail.itemType, detail.requestId)] = detail.paymentType || ''
         return methods
       }, {})
+      const dispatchedTrackingIds = deliveryNote.details.reduce((ids, detail) => {
+        ids[rowKey(detail.itemType, detail.requestId)] = detail.disbursementRecordId || detail.trackingId || detail.id || null
+        return ids
+      }, {})
 
       ;['advance', 'fertilizer', 'items'].forEach(type => {
         updateRows(type, previous => previous.map(row => (
           dispatchedKeys.has(rowKey(type, row.id))
-            ? { ...row, issued: true, paymentMethod: dispatchedMethods[rowKey(type, row.id)] || (type === 'advance' ? paymentMethods[row.id] : 'Physical Delivery'), trackingStatus: 'dispatched' }
+            ? {
+                ...row,
+                issued: true,
+                paymentMethod: dispatchedMethods[rowKey(type, row.id)] || (type === 'advance' ? paymentMethods[row.id] : 'Physical Delivery'),
+                trackingStatus: 'dispatched',
+                trackingId: dispatchedTrackingIds[rowKey(type, row.id)] || row.trackingId || null,
+              }
             : row
         )))
       })
@@ -644,41 +689,59 @@ export default function DisbursementManager() {
   const buildQueueReport = () => {
     const reportRows = currentRows.map(row => ({
       ...row,
-      paymentMethod: row.issuedType === 'advance'
-        ? paymentMethods[row.id] || row.paymentMethod || ''
-        : row.paymentMethod || 'Physical Delivery',
+      paymentMethod: getReportPaymentMethod(row, paymentMethods),
     }))
     const supplierCount = new Set(reportRows.map(row => row.regNo)).size
     const typeCountLabel = `${typeConfig[issueTab]?.label || 'Disbursement'} Count`
+    const selectedInCurrentTab = selectedList.filter(row => row.issuedType === issueTab)
+    const eligibleInCurrentTab = selectedInCurrentTab.filter(row => isDeliveryNoteEligible(row, paymentMethods))
+    const approvedCount = reportRows.filter(row => getManagementStatus(row) === 'approved').length
+    const dispatchedCount = reportRows.filter(row => getManagementStatus(row) === 'dispatched').length
+    const completedCount = reportRows.filter(row => getManagementStatus(row) === 'completed').length
+    const advanceTotal = reportRows
+      .filter(row => row.issuedType === 'advance')
+      .reduce((sum, row) => sum + Number(row.approvedAmount || 0), 0)
+    const physicalQuantity = reportRows
+      .filter(row => row.issuedType !== 'advance')
+      .reduce((sum, row) => sum + Number(row.approvedQty || 0), 0)
+    const methodSummary = Array.from(new Set(reportRows.map(row => row.paymentMethod).filter(Boolean))).join(', ') || '-'
 
     return {
       filename: `disbursement-${issueTab}-queue-report`,
       title: `${typeConfig[issueTab]?.label || 'Disbursement'} Queue Report`,
-      subtitle: `Route: ${selectedRoute === 'all' ? 'All Routes' : selectedRoute} | Date range: ${dateFrom || 'Any'} to ${dateTo || 'Any'}${issueTab === 'advance' ? ` | Payment method: ${advancePaymentFilter === 'all' ? 'All' : advancePaymentFilter}` : ''}`,
+      subtitle: `Route: ${selectedRoute === 'all' ? 'All Routes' : selectedRoute} | Status: ${statusFilter === 'all' ? 'All' : statusFilter} | Date range: ${dateFrom || 'Any'} to ${dateTo || 'Any'}${issueTab === 'advance' ? ` | Payment method: ${advancePaymentFilter === 'all' ? 'All' : advancePaymentFilter}` : ''}`,
       rows: reportRows,
       summary: [
         { label: 'Total Rows', value: reportRows.length },
         { label: 'Suppliers', value: supplierCount },
-        { label: 'Selected', value: selectedList.length },
-        { label: 'Eligible For DN', value: eligibleSelectedRows.length },
-        { label: 'Already Issued', value: reportRows.filter(row => row.issued).length },
+        { label: 'Selected', value: selectedInCurrentTab.length },
+        { label: 'DN Eligible', value: eligibleInCurrentTab.length },
+        { label: 'Approved', value: approvedCount },
+        { label: 'Dispatched', value: dispatchedCount },
+        { label: 'Completed', value: completedCount },
+        { label: issueTab === 'advance' ? 'Advance Total' : 'Total Qty', value: issueTab === 'advance' ? formatCurrency(advanceTotal) : formatQuantity(physicalQuantity) },
       ],
       totals: [
         { label: 'Supplier Count', value: supplierCount },
         { label: typeCountLabel, value: reportRows.length },
-        { label: 'Selected Count', value: selectedList.length },
-        { label: 'Delivery Note Eligible Count', value: eligibleSelectedRows.length },
-        { label: 'Already Issued Count', value: reportRows.filter(row => row.issued).length },
+        { label: 'Selected Count', value: selectedInCurrentTab.length },
+        { label: 'Delivery Note Eligible Count', value: eligibleInCurrentTab.length },
+        { label: 'Approved Count', value: approvedCount },
+        { label: 'Dispatched Count', value: dispatchedCount },
+        { label: 'Completed Count', value: completedCount },
+        { label: 'Advance Total', value: formatCurrency(advanceTotal) },
+        { label: 'Physical Quantity', value: formatQuantity(physicalQuantity) },
+        { label: 'Methods Included', value: methodSummary },
       ],
       columns: [
-        { label: 'Request No', value: 'requestNo', width: 1.1 },
-        { label: 'Reg No', value: 'regNo', width: 0.9 },
-        { label: 'Supplier Name', value: 'supplierName', width: 1.8 },
-        { label: 'Approved Date', value: 'approvedDate', width: 1 },
-        { label: 'Item / Detail', value: row => getRowLabel(row), width: 1.45 },
-        { label: 'Amount / Qty', value: row => getRowValue(row), width: 1.15 },
-        { label: 'Method', value: 'paymentMethod', width: 1.2 },
-        { label: 'DN Eligible', value: row => isDeliveryNoteEligible(row, paymentMethods) ? 'Yes' : row.issuedType === 'advance' && row.paymentMethod === 'Bank Transfer' ? 'No - Bank Transfer' : 'No', width: 1.1 },
+        { label: 'Request', value: row => row.requestNo || row.id, width: 0.95 },
+        { label: 'Reg No', value: 'regNo', width: 0.78 },
+        { label: 'Supplier / Route', value: row => getReportSupplier(row), width: 1.9 },
+        { label: 'Approved', value: row => formatDisplayDate(row.approvedDate), width: 0.95 },
+        { label: 'Detail', value: row => getRowLabel(row), width: 1.35 },
+        { label: 'Amount / Qty', value: row => getRowValue(row), width: 1.05 },
+        { label: 'Method', value: 'paymentMethod', width: 1.05 },
+        { label: 'Status', value: row => getManagementStatus(row), width: 0.82 },
       ],
     }
   }
@@ -700,11 +763,12 @@ export default function DisbursementManager() {
     const method = paymentMethods[row.id] || row.paymentMethod || ''
     if (advancePaymentFilter === 'unselected') return !method
     return method === advancePaymentFilter
-  })
-  const filteredFertilizers = fertilizersState
-  const filteredItems = itemsState
-  const pendingTotalCount = allRows.filter(item => !item.issued).length
-  const issuedTotalCount = allRows.filter(item => item.issued).length
+  }).filter(row => matchesStatusFilter(row, statusFilter))
+  const filteredFertilizers = fertilizersState.filter(row => matchesStatusFilter(row, statusFilter))
+  const filteredItems = itemsState.filter(row => matchesStatusFilter(row, statusFilter))
+  const filteredAllRows = [...filteredAdvances, ...filteredFertilizers, ...filteredItems]
+  const pendingTotalCount = filteredAllRows.filter(item => !item.issued).length
+  const issuedTotalCount = filteredAllRows.filter(item => item.issued).length
 
   const currentRows = {
     advance: filteredAdvances,
@@ -770,11 +834,11 @@ export default function DisbursementManager() {
               }
               setShowReview(true)
             }}
-            disabled={selectedList.length === 0}
+            disabled={eligibleSelectedRows.length === 0}
             className="inline-flex items-center gap-2 rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Send size={16} />
-            Generate Delivery Note ({selectedList.length})
+            Generate Delivery Note ({eligibleSelectedRows.length})
           </button>
         </div>
       </div>
@@ -797,7 +861,7 @@ export default function DisbursementManager() {
       )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricCard label="Approved Queue" value={allRows.length} icon={Truck} className="border-slate-200 bg-white text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
+        <MetricCard label="Approved Queue" value={filteredAllRows.length} icon={Truck} className="border-slate-200 bg-white text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
         <MetricCard label="Selected" value={selectedList.length} icon={CheckCircle2} className="border-green-200 bg-green-50 text-green-800 dark:border-green-900/50 dark:bg-green-900/20 dark:text-green-200" />
         <MetricCard label="Eligible For DN" value={eligibleSelectedRows.length} icon={Download} className="border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-900/20 dark:text-emerald-200" />
         <MetricCard label="Still Pending" value={pendingTotalCount} icon={AlertCircle} className="border-orange-200 bg-orange-50 text-orange-800 dark:border-orange-900/50 dark:bg-orange-900/20 dark:text-orange-200" />
@@ -815,6 +879,22 @@ export default function DisbursementManager() {
             }}
             options={routeOptions.map(route => ({ value: route.id, label: route.name }))}
             className="min-w-48"
+            buttonClassName="bg-slate-50 px-4 py-2 text-sm dark:bg-slate-700"
+          />
+          <Combobox
+            value={statusFilter}
+            onChange={(value) => {
+              setStatusFilter(value || 'all')
+              setSelectedRows({})
+            }}
+            options={[
+              { value: 'all', label: 'All Statuses' },
+              { value: 'awaiting', label: 'Awaiting' },
+              { value: 'approved', label: 'Approved' },
+              { value: 'dispatched', label: 'Dispatched' },
+              { value: 'completed', label: 'Completed' },
+            ]}
+            className="min-w-44"
             buttonClassName="bg-slate-50 px-4 py-2 text-sm dark:bg-slate-700"
           />
           <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
@@ -841,14 +921,19 @@ export default function DisbursementManager() {
               className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-green-600 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-300"
             />
           </label>
-          {(dateFrom || dateTo || selectedRoute !== 'all') && (
+          {(dateFrom || dateTo || selectedRoute !== 'all' || statusFilter !== 'approved' || advancePaymentFilter !== 'all') && (
             <button
               type="button"
               onClick={() => {
-                setQueueLoading(true)
+                if (dateFrom || dateTo || selectedRoute !== 'all') {
+                  setQueueLoading(true)
+                }
                 setSelectedRoute('all')
+                setStatusFilter('approved')
+                setAdvancePaymentFilter('all')
                 setDateFrom('')
                 setDateTo('')
+                setSelectedRows({})
               }}
               className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
             >
@@ -862,6 +947,7 @@ export default function DisbursementManager() {
               options={[
                 { value: 'all', label: 'All Payment Methods' },
                 { value: 'Cash', label: 'Cash' },
+                { value: 'Account Transfer', label: 'Account Transfer' },
                 { value: 'Bank Transfer', label: 'Bank Transfer' },
                 { value: 'Cheque', label: 'Cheque' },
                 { value: 'unselected', label: 'Not Selected' },
@@ -911,14 +997,13 @@ export default function DisbursementManager() {
       />
 
       <div className="rounded-xl border border-slate-200 bg-white px-5 py-4 text-sm text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-        <span className="font-semibold text-slate-900 dark:text-white">{issuedTotalCount}</span> records already issued or dispatched. Cash and cheque advances, fertilizer, and item records are saved to delivery notes; bank transfers stay outside the delivery note.
+        <span className="font-semibold text-slate-900 dark:text-white">{issuedTotalCount}</span> records already dispatched. Cash and cheque advances, fertilizer, and item records are saved to delivery notes; bank transfers stay outside the delivery note.
       </div>
 
       {showReview && (
         <SelectedReviewModal
           borrower={borrower}
           eligibleRows={eligibleSelectedRows}
-          excludedRows={excludedSelectedRows}
           generating={generating}
           onBorrowerChange={(field, value) => setBorrower(prev => ({ ...prev, [field]: value }))}
           onClose={() => setShowReview(false)}

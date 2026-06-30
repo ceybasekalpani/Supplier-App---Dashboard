@@ -45,6 +45,10 @@ export const statusStyles = {
     light: { background: '#ECFDF5', border: '#6EE7B7', text: '#047857' },
     dark: { background: '#022C22', border: '#047857', text: '#34D399' },
   },
+  dispatched: {
+    light: { background: '#DCFCE7', border: '#86EFAC', text: '#166534' },
+    dark: { background: '#052E16', border: '#16A34A', text: '#4ADE80' },
+  },
   issued: {
     light: { background: '#DCFCE7', border: '#86EFAC', text: '#166534' },
     dark: { background: '#052E16', border: '#16A34A', text: '#4ADE80' },
@@ -62,7 +66,8 @@ export const normalizeStatus = status => {
   if (normalized.includes('awaiting')) return 'awaiting'
   if (normalized.includes('scheduled')) return 'scheduled'
   if (normalized.includes('delivered')) return 'delivered'
-  if (normalized.includes('issued')) return 'issued'
+  if (normalized.includes('dispatched')) return 'dispatched'
+  if (normalized.includes('issued')) return 'dispatched'
   if (normalized.includes('inactive')) return 'inactive'
   if (normalized.includes('active')) return 'active'
   if (normalized.includes('draft')) return 'draft'
@@ -83,7 +88,7 @@ export const getStatusPalette = (status, dark = false) => {
 export const getStatusChartColor = status => {
   const normalized = normalizeStatus(status)
 
-  if (['approved', 'completed', 'active', 'delivered', 'issued'].includes(normalized)) return '#16A34A'
+  if (['approved', 'completed', 'active', 'delivered', 'dispatched', 'issued'].includes(normalized)) return '#16A34A'
   if (['pending', 'draft'].includes(normalized)) return '#EAB308'
   if (['awaiting', 'scheduled'].includes(normalized)) return '#F97316'
   if (['rejected', 'expired', 'failed'].includes(normalized)) return '#DC2626'
@@ -93,7 +98,9 @@ export const getStatusChartColor = status => {
 
 export default function StatusBadge({ status, showDot = false, className = '' }) {
   const { dark } = useTheme()
-  const palette = getStatusPalette(status, dark)
+  const normalized = normalizeStatus(status)
+  const palette = getStatusPalette(normalized, dark)
+  const label = normalized || String(status || '').replace(/_/g, ' ')
 
   return (
     <span
@@ -110,7 +117,7 @@ export default function StatusBadge({ status, showDot = false, className = '' })
           style={{ backgroundColor: palette.text }}
         />
       )}
-      {String(status || '').replace(/_/g, ' ')}
+      {label.replace(/_/g, ' ')}
     </span>
   )
 }

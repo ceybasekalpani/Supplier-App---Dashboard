@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import StatusBadge from '../components/ui/StatusBadge'
 import Combobox from '../components/ui/Combobox'
+import { adminAuthStorage } from '../services/adminApiClient'
 import { disbursementApi } from '../services/disbursementApi'
 import { dashboardRequestsApi } from '../services/dashboardRequestsApi'
 import { downloadDocReport, printReportAsPdf } from '../utils/reports'
@@ -135,6 +136,14 @@ const getExplicitTrackingId = (item = {}) => normalizeId(
   || item.trackingRecordID
 )
 
+const getDeliveryDetailId = (item = {}) => normalizeId(
+  item.deliveryNoteDetailId
+  || item.deliveryNoteDetailID
+  || item.detailId
+  || item.detailID
+  || item.id
+)
+
 const getTrackingId = (item = {}) => normalizeId(
   getExplicitTrackingId(item)
   || item.id
@@ -175,17 +184,31 @@ const looksLikeFertilizerName = (value) => {
 const getDeviceName = () => {
   if (typeof navigator === 'undefined') return 'Unknown device'
   const ua = navigator.userAgent || ''
+  const platform = navigator.userAgentData?.platform || navigator.platform || 'Unknown platform'
+  const browser = (() => {
+    if (/Edg\//.test(ua)) return 'Microsoft Edge'
+    if (/Chrome\//.test(ua)) return 'Chrome'
+    if (/Firefox\//.test(ua)) return 'Firefox'
+    if (/Safari\//.test(ua)) return 'Safari'
+    return 'Unknown browser'
+  })()
 
-  if (/Edg\//.test(ua)) return 'Microsoft Edge browser'
-  if (/Chrome\//.test(ua)) return 'Chrome browser'
-  if (/Firefox\//.test(ua)) return 'Firefox browser'
-  if (/Safari\//.test(ua)) return 'Safari browser'
-  return navigator.platform || 'Unknown device'
+  return `${platform} - ${browser}`
 }
 
 const getCompletedUser = () => {
-  if (typeof window === 'undefined') return 'Current User'
-  return window.localStorage.getItem('supplier-app-current-user') || 'Current User'
+  if (typeof window === 'undefined') return 'Unknown user'
+
+  const admin = adminAuthStorage.getUser()
+  const value = admin?.fullName
+    || admin?.name
+    || admin?.displayName
+    || admin?.username
+    || admin?.userName
+    || admin?.email
+    || (admin?.id ? `Admin #${admin.id}` : '')
+
+  return String(value || '').trim() || 'Unknown user'
 }
 
 const pickPersonName = (value) => {
@@ -484,11 +507,33 @@ const findTrackingRecordForDetail = (detail, note, trackingRows) => {
   const detailCategory = normalizeText(detailValue.name)
   const detailUnit = normalizeText(detailValue.unit)
 
+  if (detailTrackingId) {
+    return trackingRows.find(row => {
+      const rowTrackingId = getTrackingId(row)
+      return rowTrackingId && detailTrackingId === rowTrackingId
+    }) || null
+  }
+
+  const exactRequestMatch = trackingRows.find(row => {
+    const rowType = normalizeDisbursementType(row.issuedType || row.itemType || row.type)
+    const rowRegNo = getRegNo(row)
+    const rowRequestId = getRequestId(row)
+
+    return detailRequestId
+      && rowRequestId
+      && rowRequestId === detailRequestId
+      && rowType === detailType
+      && normalizeText(rowRegNo) === normalizeText(detailRegNo)
+  })
+
+  if (exactRequestMatch) return exactRequestMatch
+
+  if (detailRequestId) return null
+
   return trackingRows.find(row => {
     const rowTrackingId = getTrackingId(row)
     const rowType = normalizeDisbursementType(row.issuedType || row.itemType || row.type)
     const rowRegNo = getRegNo(row)
-    const rowRequestId = getRequestId(row)
     const rowDeliveryNoteId = getDeliveryNoteId(row)
     const rowValue = parseTrackingValue(row)
     const rowCategory = normalizeText(rowValue.name)
@@ -496,7 +541,6 @@ const findTrackingRecordForDetail = (detail, note, trackingRows) => {
 
     const sameType = rowType === detailType
     const sameRegNo = normalizeText(rowRegNo) === normalizeText(detailRegNo)
-    const sameRequest = detailRequestId && rowRequestId && rowRequestId === detailRequestId
     const sameDeliveryNote = rowDeliveryNoteId && (
       (detailDeliveryNoteId && rowDeliveryNoteId === detailDeliveryNoteId)
       || (noteIds.size > 0 && noteIds.has(rowDeliveryNoteId))
@@ -504,9 +548,7 @@ const findTrackingRecordForDetail = (detail, note, trackingRows) => {
     const sameCategory = !detailCategory || !rowCategory || rowCategory === detailCategory
     const sameUnit = !detailUnit || !rowUnit || rowUnit === detailUnit
 
-    if (detailTrackingId && rowTrackingId && detailTrackingId === rowTrackingId) return true
-
-    return sameType && (sameRequest || (sameDeliveryNote && sameRegNo && sameCategory && sameUnit))
+    return rowTrackingId && sameType && sameDeliveryNote && sameRegNo && sameCategory && sameUnit
   })
 }
 
@@ -540,6 +582,8 @@ const mergeAssignedDetails = (note, trackingRows) => {
   sourceRows.forEach(row => {
     const parsed = parseTrackingValue(row)
     const key = [
+      getDeliveryNoteId(row),
+      getDeliveryDetailId(row),
       getExplicitTrackingId(row),
       getRequestId(row),
       normalizeDisbursementType(row.issuedType || row.itemType || row.type),
@@ -584,18 +628,24 @@ const enrichDeliveryNoteDetails = (note, trackingRows, approvalRows = []) => {
 
     return {
       ...detail,
+      deliveryNoteDetailId: getDeliveryDetailId(detail),
       trackingId: trackingRecord?.id || detail.disbursementRecordId || detail.trackingId || detail.id || null,
       requestId: getRequestId(detail) || getRequestId(trackingRecord),
       issuedType,
       categoryName,
       value,
       unit,
+      paymentType: detail.paymentType || trackingRecord?.paymentType || trackingRecord?.method || detail.method || '',
+      method: trackingRecord?.method || detail.method || detail.paymentType || '',
       supplierName: getSupplierName(detail) !== '-' ? getSupplierName(detail) : getSupplierName(trackingRecord),
       regNo: getRegNo(detail) !== '-' ? getRegNo(detail) : getRegNo(trackingRecord),
       route: getRouteName(detail) !== '-' ? getRouteName(detail) : getRouteName(trackingRecord),
       approvedBy: getRequestApprovedBy(approvedRequest) || getApprovedBy(detail, trackingRecord),
       dispatchDate: getDispatchDateTime(detail, trackingRecord || detail, note),
       status: trackingRecord?.currentStatus || detail.currentStatus || detail.status || 'awaiting',
+      completedDate: trackingRecord?.completedDate || detail.completedDate || '',
+      completedBy: trackingRecord?.completedBy || detail.completedBy || '',
+      completedDevice: trackingRecord?.completedDevice || detail.completedDevice || '',
     }
   })
 }
@@ -646,6 +696,52 @@ const getDisbursementCategoryLabel = (group) => {
 }
 
 const getReceiptStatus = (status) => String(status || '').toLowerCase() === 'completed' ? 'completed' : 'awaiting'
+
+const normalizeTrackingStatus = (status) => {
+  const value = String(status || '').trim().toLowerCase()
+  if (value === 'issued') return 'dispatched'
+  return value || 'awaiting'
+}
+
+const matchesStatusFilter = (row = {}, statusFilter = 'all') => {
+  if (!statusFilter || statusFilter === 'all') return true
+
+  const status = normalizeTrackingStatus(row.currentStatus || row.status)
+
+  return status === statusFilter
+}
+
+const normalizePaymentMethod = (value) => {
+  const text = String(value || '').trim().toLowerCase()
+
+  if (!text) return ''
+  if (text.includes('cash')) return 'cash'
+  if (text.includes('cheque') || text.includes('check')) return 'cheque'
+  if (text.includes('account')) return 'account-transfer'
+  if (text.includes('bank')) return 'bank-transfer'
+  return text.replace(/\s+/g, '-')
+}
+
+const paymentMethodLabels = {
+  cash: 'Cash',
+  cheque: 'Cheque',
+  'account-transfer': 'Account Transfer',
+  'bank-transfer': 'Bank Transfer',
+}
+
+const getPaymentMethod = (row = {}) => row.paymentType || row.method || row.paymentMethod || '-'
+
+const getDisplayStatus = (status) => normalizeTrackingStatus(status)
+
+const getReceiptRowKey = (row = {}) => [
+  row.trackingId || getTrackingId(row),
+  row.deliveryNoteDetailId || getDeliveryDetailId(row),
+  row.requestId || getRequestId(row),
+  row.deliveryNoteNo || getDeliveryNoteNo(row),
+  row.issuedType,
+  normalizeText(row.categoryName),
+  normalizeText(row.regNo),
+].filter(Boolean).join('|')
 
 const sanitizeFilenamePart = (value) => (
   String(value || '')
@@ -733,7 +829,9 @@ function TrackingDetailsModal({ item, onClose }) {
 export default function DisbursementTracking() {
   const [trackingRows, setTrackingRows] = useState([])
   const [dateFilter, setDateFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
   const [searchTerm, setSearchTerm] = useState('')
+  const [activeTab, setActiveTab] = useState('tracking')
   const [showSuccess, setShowSuccess] = useState(null)
   const [showError, setShowError] = useState(null)
   const [trackingLoading, setTrackingLoading] = useState(true)
@@ -755,7 +853,7 @@ export default function DisbursementTracking() {
     disbursementApi
       .getTracking({
         issuedType: 'all',
-        status: 'all',
+        status: statusFilter,
         search: searchTerm,
         fromDate: dateFilter,
         toDate: dateFilter,
@@ -777,7 +875,7 @@ export default function DisbursementTracking() {
     return () => {
       controller.abort()
     }
-  }, [dateFilter, searchTerm])
+  }, [dateFilter, searchTerm, statusFilter])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -809,10 +907,18 @@ export default function DisbursementTracking() {
     }
   }, [dateFilter, searchTerm])
 
-  const filteredRows = trackingRows
+  const filteredRows = useMemo(() => (
+    trackingRows.filter(row => matchesStatusFilter(row, statusFilter))
+  ), [statusFilter, trackingRows])
   const borrowerDispatchGroups = useMemo(() => (
-    buildBorrowerDispatchGroups(deliveryNotes)
-  ), [deliveryNotes])
+    buildBorrowerDispatchGroups(
+      statusFilter === 'all'
+        ? deliveryNotes
+        : deliveryNotes.filter(note => trackingRows.some(row => (
+          matchesStatusFilter(row, statusFilter) && isTrackingRowAssignedToNote(row, note)
+        )))
+    )
+  ), [deliveryNotes, statusFilter, trackingRows])
 
   const selectedTrackingRows = useMemo(() => {
     const merged = [...trackingRows]
@@ -830,7 +936,8 @@ export default function DisbursementTracking() {
 
   const selectedBorrowerDetails = useMemo(() => (
     enrichDeliveryNoteDetails(selectedNote, selectedTrackingRows, selectedApprovalRows)
-  ), [selectedApprovalRows, selectedNote, selectedTrackingRows])
+      .filter(row => matchesStatusFilter(row, statusFilter))
+  ), [selectedApprovalRows, selectedNote, selectedTrackingRows, statusFilter])
 
   const borrowerSummaryGroups = useMemo(() => (
     buildBorrowerSummaryGroups(selectedBorrowerDetails)
@@ -843,14 +950,98 @@ export default function DisbursementTracking() {
   const completedCount = filteredRows.filter(item => item.currentStatus === 'completed').length
   const awaitingCount = filteredRows.filter(item => getReceiptStatus(item.currentStatus) === 'awaiting').length
   const dispatchedCount = filteredRows.filter(item => item.currentStatus === 'dispatched').length
+  const advanceReceiptRows = useMemo(() => (
+    filteredRows
+      .filter(row => row.issuedType === 'advance')
+      .filter(row => ['account-transfer', 'bank-transfer', 'cheque'].includes(normalizePaymentMethod(getPaymentMethod(row))))
+      .map(row => ({
+        ...row,
+        trackingId: row.id,
+        status: row.currentStatus,
+        categoryName: 'Advance',
+        value: parseTrackingValue(row).value,
+        unit: 'Rs',
+      }))
+  ), [filteredRows])
   const selectedBorrowerName = selectedNote?.borrowerName || '-'
   const selectedBorrowerRoute = selectedNote?.routeName || '-'
   const selectedDeliveryNoteLabel = selectedNote?.deliveryNoteNos?.join(', ') || selectedNote?.deliveryNoteNo || '-'
+  const allReportRows = useMemo(() => (
+    filteredRows.map(row => ({
+      ...row,
+      value: parseTrackingValue(row).value,
+      unit: parseTrackingValue(row).unit || (row.issuedType === 'advance' ? 'Rs' : ''),
+      categoryName: parseTrackingValue(row).name,
+      status: row.currentStatus,
+      paymentType: row.paymentType || row.method || '',
+      method: row.method || row.paymentType || '',
+    }))
+  ), [filteredRows])
+
+  const buildFocusedDisbursementReport = ({ issuedType = '', paymentMethod = '' }) => {
+    const normalizedPayment = normalizePaymentMethod(paymentMethod)
+    const typeLabel = issuedType ? typeStyles[issuedType]?.label || 'Items' : 'All Types'
+    const paymentLabel = normalizedPayment ? paymentMethodLabels[normalizedPayment] || paymentMethod : 'All Payment Methods'
+    const hideDeliveryNoteNo = ['account-transfer', 'bank-transfer', 'cheque'].includes(normalizedPayment)
+    const rows = allReportRows.filter(row => {
+      const sameType = !issuedType || row.issuedType === issuedType
+      const samePayment = !normalizedPayment || normalizePaymentMethod(getPaymentMethod(row)) === normalizedPayment
+      return sameType && samePayment
+    })
+    const totalAmount = rows
+      .filter(row => row.issuedType === 'advance')
+      .reduce((sum, row) => sum + Number(parseTrackingValue(row).value || 0), 0)
+    const totalQuantity = rows
+      .filter(row => row.issuedType !== 'advance')
+      .reduce((sum, row) => sum + Number(parseTrackingValue(row).value || 0), 0)
+    const showPhysicalQuantity = issuedType !== 'advance'
+    const summary = [
+      { label: 'Records', value: rows.length },
+      { label: 'Suppliers', value: new Set(rows.map(row => row.regNo)).size },
+      { label: 'Completed', value: rows.filter(row => getReceiptStatus(row.currentStatus || row.status) === 'completed').length },
+      { label: 'Awaiting', value: rows.filter(row => getReceiptStatus(row.currentStatus || row.status) === 'awaiting').length },
+      { label: 'Advance Total', value: formatCurrency(totalAmount) },
+      ...(showPhysicalQuantity ? [{ label: 'Physical Qty', value: formatQuantity(totalQuantity) }] : []),
+    ]
+    const totals = [
+      { label: 'Supplier Count', value: new Set(rows.map(row => row.regNo)).size },
+      { label: 'Advance Count', value: rows.filter(row => row.issuedType === 'advance').length },
+      { label: 'Fertilizer Count', value: rows.filter(row => row.issuedType === 'fertilizer').length },
+      { label: 'Item Count', value: rows.filter(row => row.issuedType === 'items').length },
+      { label: 'Advance Total', value: formatCurrency(totalAmount) },
+      ...(showPhysicalQuantity ? [{ label: 'Physical Quantity', value: formatQuantity(totalQuantity) }] : []),
+    ]
+
+    return {
+      filename: [
+        issuedType ? `disbursement-${issuedType}` : 'disbursement-payment',
+        normalizedPayment || '',
+        'report',
+      ].filter(Boolean).join('-'),
+      title: `${typeLabel} Disbursement Report`,
+      subtitle: `Payment: ${paymentLabel} | Status: ${statusFilter === 'all' ? 'All' : statusFilter} | Date: ${dateFilter || 'Any'} | Search: ${searchTerm || 'None'}`,
+      rows,
+      summary,
+      totals,
+      columns: [
+        { label: 'Request No', value: 'requestNo', width: 1.05 },
+        ...(!hideDeliveryNoteNo ? [{ label: 'DN No', value: row => row.deliveryNoteNo || '-', width: 1 }] : []),
+        { label: 'Reg No', value: 'regNo', width: 0.75 },
+        { label: 'Supplier Name', value: 'supplierName', width: 1.55 },
+        { label: 'Type', value: row => typeStyles[row.issuedType]?.label || 'Item', width: 0.85 },
+        { label: 'Item / Detail', value: row => parseTrackingValue(row).name, width: 1.35 },
+        { label: 'Amount / Qty', value: row => formatByUnit(parseTrackingValue(row).value, parseTrackingValue(row).unit), width: 1 },
+        { label: 'Payment', value: row => getPaymentMethod(row), width: 1.05 },
+        { label: 'Dispatch Date', value: row => formatDateTime(row.issueDate || row.dispatchedAt), width: 1.15 },
+        { label: 'Receipt', value: row => getDisplayStatus(getReceiptStatus(row.currentStatus || row.status)), width: 0.85 },
+      ],
+    }
+  }
 
   const buildTrackingReport = () => ({
     filename: 'disbursement-tracking-report',
     title: 'Disbursement Tracking Report',
-    subtitle: `Date: ${dateFilter || 'Any'} | Search: ${searchTerm || 'None'}`,
+    subtitle: `Status: ${statusFilter === 'all' ? 'All' : statusFilter} | Date: ${dateFilter || 'Any'} | Search: ${searchTerm || 'None'}`,
     rows: filteredRows,
     summary: [
       { label: 'Tracking Records', value: filteredRows.length },
@@ -876,24 +1067,24 @@ export default function DisbursementTracking() {
       { label: 'Item / Detail', value: row => parseTrackingValue(row).name, width: 1.4 },
       { label: 'Amount / Qty', value: row => formatByUnit(parseTrackingValue(row).value, parseTrackingValue(row).unit), width: 1 },
       { label: 'Method', value: 'method', width: 1 },
-      { label: 'Issue Date / Time', value: row => formatDateTime(row.issueDate), width: 1.15 },
-      { label: 'Status', value: 'currentStatus', width: 0.8 },
+      { label: 'Dispatch Date / Time', value: row => formatDateTime(row.issueDate), width: 1.15 },
+      { label: 'Status', value: row => getDisplayStatus(row.currentStatus), width: 0.8 },
     ],
   })
 
   const buildDeliveryNoteReport = () => {
     const noteIds = new Set(deliveryNotes.map(note => note.id))
-    const detailRows = trackingRows.filter(row => noteIds.has(row.deliveryNoteId))
+    const detailRows = filteredRows.filter(row => noteIds.has(row.deliveryNoteId))
 
     return ({
       filename: 'delivery-note-borrower-report',
       title: 'Borrower Delivery Note Report',
-      subtitle: `Date: ${dateFilter || 'Any'} | Search: ${searchTerm || 'None'}`,
+      subtitle: `Status: ${statusFilter === 'all' ? 'All' : statusFilter} | Date: ${dateFilter || 'Any'} | Search: ${searchTerm || 'None'}`,
       rows: borrowerDispatchGroups,
       summary: [
         { label: 'Borrowers', value: borrowerDispatchGroups.length },
         { label: 'Suppliers', value: new Set(detailRows.map(row => row.regNo)).size || '-' },
-        { label: 'Issued', value: deliveryNotes.filter(note => note.status === 'issued').length },
+        { label: 'Dispatched', value: deliveryNotes.filter(note => ['issued', 'dispatched'].includes(normalizeTrackingStatus(note.status))).length },
         { label: 'Returned', value: deliveryNotes.filter(note => note.status === 'returned').length },
         { label: 'Completed', value: deliveryNotes.filter(note => note.status === 'completed').length },
       ],
@@ -959,11 +1150,12 @@ export default function DisbursementTracking() {
         { label: 'Awaiting Receipts', value: selectedBorrowerDetails.length - completedReceipts },
       ],
       columns: [
+        { label: 'Request No', value: row => row.requestNo || '-', width: 1 },
         { label: 'Supplier Name', value: 'supplierName', width: 1.9 },
         { label: 'Reg No', value: 'regNo', width: 0.8 },
         { label: 'Category', value: row => `${typeStyles[row.issuedType]?.label || 'Item'} - ${row.categoryName}`, width: 1.55 },
         { label: 'Amount / Qty', value: row => formatByUnit(row.value, row.unit), width: 1.05 },
-        { label: 'Unit', value: 'unit', width: 0.65 },
+        { label: 'Payment', value: row => getPaymentMethod(row), width: 0.95 },
         { label: 'Dispatch Date / Time', value: row => formatDateTime(row.dispatchDate), width: 1.35 },
         { label: 'Approved By', value: 'approvedBy', width: 1.15 },
         { label: 'Receipt Status', value: row => getReceiptStatus(row.status), width: 0.95 },
@@ -1009,6 +1201,49 @@ export default function DisbursementTracking() {
     }
   }
 
+  const downloadReport = (report, format) => {
+    if (format === 'doc') {
+      downloadDocReport(report)
+      return
+    }
+
+    if (!printReportAsPdf(report)) {
+      setShowError('Popup blocked. Please allow popups to print or save the report as PDF.')
+      setTimeout(() => setShowError(null), 3000)
+    }
+  }
+
+  const handleTypeReportFormat = (value) => {
+    if (!value) return
+
+    const [issuedType, format] = value.split(':')
+    const report = buildFocusedDisbursementReport({ issuedType })
+
+    if (report.rows.length === 0) {
+      setShowError(`No ${typeStyles[issuedType]?.label || issuedType} records found for the current filters`)
+      setTimeout(() => setShowError(null), 3000)
+      return
+    }
+
+    downloadReport(report, format)
+  }
+
+  const handlePaymentReportFormat = (value) => {
+    if (!value) return
+
+    const [paymentMethod, format] = value.split(':')
+    const normalizedPayment = normalizePaymentMethod(paymentMethod)
+    const report = buildFocusedDisbursementReport({ paymentMethod })
+
+    if (report.rows.length === 0) {
+      setShowError(`No ${paymentMethodLabels[normalizedPayment] || paymentMethod} records found for the current filters`)
+      setTimeout(() => setShowError(null), 3000)
+      return
+    }
+
+    downloadReport(report, format)
+  }
+
   const handleDeliveryNoteReportFormat = (format) => {
     if (!format) return
     if (format === 'doc') {
@@ -1036,7 +1271,7 @@ export default function DisbursementTracking() {
         Promise.all(notesToLoad.map(item => disbursementApi.getDeliveryNote(item.id))),
         disbursementApi.getTracking({
           issuedType: 'all',
-          status: 'all',
+          status: statusFilter,
           fromDate: '',
           toDate: '',
         }),
@@ -1131,32 +1366,43 @@ export default function DisbursementTracking() {
     }
   }
 
-  const markReceived = async (id) => {
+  const markReceived = async (row) => {
+    const id = row?.trackingId
+
     if (!id) {
       setShowError('Tracking record not found for this row')
       setTimeout(() => setShowError(null), 3000)
       return
     }
 
+    const receiptRowKey = getReceiptRowKey(row)
     const completedBy = getCompletedUser()
     const completedDevice = getDeviceName()
 
-    setReceivingId(id)
+    setReceivingId(normalizeId(id))
     setShowError(null)
 
     try {
       const updated = await disbursementApi.markReceived({ id, completedBy, completedDevice })
 
       setTrackingRows(prev => prev.map(item => (
-        item.id === id ? updated : item
+        normalizeId(item.id) === normalizeId(id) ? updated : item
       )))
       setSelectedAssignmentRows(prev => prev.map(item => (
-        item.id === id ? updated : item
+        normalizeId(item.id) === normalizeId(id) ? updated : item
       )))
       setSelectedReceiptRows(prev => prev.map(item => (
-        item.trackingId === id ? { ...item, status: updated.currentStatus } : item
+        getReceiptRowKey(item) === receiptRowKey
+          ? {
+              ...item,
+              status: updated.currentStatus,
+              completedDate: updated.completedDate,
+              completedBy: updated.completedBy,
+              completedDevice: updated.completedDevice,
+            }
+          : item
       )))
-      setViewingItem(current => current?.id === id ? updated : current)
+      setViewingItem(current => normalizeId(current?.id) === normalizeId(id) ? updated : current)
       setShowSuccess('Receipt confirmed successfully')
       setTimeout(() => setShowSuccess(null), 2500)
     } catch (error) {
@@ -1203,6 +1449,40 @@ export default function DisbursementTracking() {
         </div>
 
         <div className="flex flex-wrap gap-2">
+          <Combobox
+            value=""
+            onChange={handleTypeReportFormat}
+            disabled={filteredRows.length === 0}
+            placeholder="Type Report"
+            options={[
+              { value: 'advance:pdf', label: 'Advance PDF' },
+              { value: 'advance:doc', label: 'Advance DOC' },
+              { value: 'fertilizer:pdf', label: 'Fertilizer PDF' },
+              { value: 'fertilizer:doc', label: 'Fertilizer DOC' },
+              { value: 'items:pdf', label: 'Items PDF' },
+              { value: 'items:doc', label: 'Items DOC' },
+            ]}
+            className="min-w-40"
+            buttonClassName="bg-white dark:bg-slate-800"
+          />
+          <Combobox
+            value=""
+            onChange={handlePaymentReportFormat}
+            disabled={filteredRows.length === 0}
+            placeholder="Payment Report"
+            options={[
+              { value: 'cash:pdf', label: 'Cash PDF' },
+              { value: 'cash:doc', label: 'Cash DOC' },
+              { value: 'cheque:pdf', label: 'Cheque PDF' },
+              { value: 'cheque:doc', label: 'Cheque DOC' },
+              { value: 'account-transfer:pdf', label: 'Account Transfer PDF' },
+              { value: 'account-transfer:doc', label: 'Account Transfer DOC' },
+              { value: 'bank-transfer:pdf', label: 'Bank Transfer PDF' },
+              { value: 'bank-transfer:doc', label: 'Bank Transfer DOC' },
+            ]}
+            className="min-w-44"
+            buttonClassName="bg-white dark:bg-slate-800"
+          />
           <Combobox
             value=""
             onChange={handleDeliveryNoteReportFormat}
@@ -1270,6 +1550,29 @@ export default function DisbursementTracking() {
           </div>
 
           <label className="flex items-center gap-2 text-sm font-semibold text-slate-600 dark:text-slate-300">
+            Status
+            <Combobox
+              value={statusFilter}
+              onChange={(value) => {
+                setStatusFilter(value || 'all')
+                setSelectedNote(null)
+                setSelectedAssignmentRows([])
+                setSelectedApprovalRows([])
+                setSelectedGroupKey('')
+                setSelectedReceiptRows([])
+              }}
+              options={[
+                { value: 'all', label: 'All Statuses' },
+                { value: 'awaiting', label: 'Awaiting' },
+                { value: 'dispatched', label: 'Dispatched' },
+                { value: 'completed', label: 'Completed' },
+              ]}
+              className="min-w-40"
+              buttonClassName="bg-slate-50 dark:bg-slate-700"
+            />
+          </label>
+
+          <label className="flex items-center gap-2 text-sm font-semibold text-slate-600 dark:text-slate-300">
             Dispatch date
             <input
               type="date"
@@ -1305,6 +1608,109 @@ export default function DisbursementTracking() {
         </div>
       </section>
 
+      <div className="border-b border-slate-200 dark:border-slate-700">
+        <div className="flex flex-wrap gap-2">
+          {[
+            { id: 'tracking', label: 'Delivery Note Tracking', count: borrowerDispatchGroups.length },
+            { id: 'advance-receipts', label: 'Advance Receipt Confirmation', count: advanceReceiptRows.length },
+          ].map(tab => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={`rounded-t-lg border-b-2 px-5 py-2.5 text-sm font-semibold transition-colors ${
+                activeTab === tab.id
+                  ? 'border-green-600 bg-white text-green-700 dark:bg-slate-800 dark:text-green-300'
+                  : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+              }`}
+            >
+              {tab.label} ({tab.count})
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {activeTab === 'advance-receipts' && (
+        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
+          <div className="border-b border-slate-200 px-6 py-4 dark:border-slate-700">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="font-semibold text-slate-900 dark:text-white">Advance Receipt Confirmation</h3>
+                <p className="mt-0.5 text-xs text-slate-500">Confirm supplier receipt for account transfer, bank transfer, and cheque advances</p>
+              </div>
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+                {advanceReceiptRows.length} advance record{advanceReceiptRows.length === 1 ? '' : 's'}
+              </span>
+            </div>
+          </div>
+
+          <div className="max-h-80 overflow-auto">
+            <table className="w-full min-w-[980px] text-sm">
+              <thead className="sticky top-0 z-10 bg-slate-50 text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-800">
+                <tr className="border-b border-slate-200 dark:border-slate-700">
+                  <th className="px-4 py-3 text-left">Supplier Name</th>
+                  <th className="px-4 py-3 text-left">Reg No</th>
+                  <th className="px-4 py-3 text-left">Request No</th>
+                  <th className="px-4 py-3 text-left">Amount</th>
+                  <th className="px-4 py-3 text-left">Payment</th>
+                  <th className="px-4 py-3 text-left">Action</th>
+                  <th className="px-4 py-3 text-left">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {advanceReceiptRows.length === 0 ? (
+                  <EmptyTableRow colSpan={7} icon={Banknote} message="No advance receipt records found for the current filters" />
+                ) : advanceReceiptRows.map(row => {
+                  const receiptStatus = getReceiptStatus(row.status)
+                  const canMarkReceived = receiptStatus !== 'completed'
+                  const actionDisabled = normalizeId(receivingId) === normalizeId(row.trackingId) || !row.trackingId
+
+                  return (
+                    <tr key={`advance-receipt-${row.trackingId}`} className="border-b border-slate-100 transition-colors hover:bg-slate-50 dark:border-slate-700/50 dark:hover:bg-slate-700/30">
+                      <td className="px-4 py-3">
+                        <p className="font-semibold text-slate-900 dark:text-white">{row.supplierName || '-'}</p>
+                        <button
+                          type="button"
+                          onClick={() => viewDetails(row)}
+                          className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-green-700 hover:text-green-800 dark:text-green-400"
+                        >
+                          <Eye size={11} /> View details
+                        </button>
+                      </td>
+                      <td className="px-4 py-3 font-mono font-semibold text-green-700 dark:text-green-400">{row.regNo || '-'}</td>
+                      <td className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-200">{row.requestNo || '-'}</td>
+                      <td className="px-4 py-3 font-semibold text-slate-800 dark:text-slate-200">{formatCurrency(row.value)}</td>
+                      <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{getPaymentMethod(row)}</td>
+                      <td className="px-4 py-3">
+                        {canMarkReceived ? (
+                          <button
+                            type="button"
+                            onClick={() => markReceived(row)}
+                            disabled={actionDisabled}
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-green-700 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-60"
+                            title={!row.trackingId ? 'Tracking record not found for this advance' : 'Mark received'}
+                          >
+                            {normalizeId(receivingId) === normalizeId(row.trackingId) ? <RefreshCw size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
+                            Mark Received
+                          </button>
+                        ) : (
+                          <span className="text-xs font-semibold text-green-700 dark:text-green-400">Receipt confirmed</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <StatusBadge status={receiptStatus} className="px-2.5 py-1" />
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {activeTab === 'tracking' && (
+        <>
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
         <div className="border-b border-slate-200 px-6 py-4 dark:border-slate-700">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1509,10 +1915,10 @@ export default function DisbursementTracking() {
               ) : selectedReceiptRows.map(row => {
                 const receiptStatus = getReceiptStatus(row.status)
                 const canMarkReceived = receiptStatus !== 'completed'
-                const actionDisabled = receivingId === row.trackingId || !row.trackingId
+                const actionDisabled = normalizeId(receivingId) === normalizeId(row.trackingId) || !row.trackingId
 
                 return (
-                  <tr key={`${row.regNo}-${row.issuedType}-${row.categoryName}-${row.trackingId || row.id}`} className="border-b border-slate-100 transition-colors hover:bg-slate-50 dark:border-slate-700/50 dark:hover:bg-slate-700/30">
+                  <tr key={getReceiptRowKey(row)} className="border-b border-slate-100 transition-colors hover:bg-slate-50 dark:border-slate-700/50 dark:hover:bg-slate-700/30">
                     <td className="px-4 py-3">
                       <p className="font-semibold text-slate-900 dark:text-white">{row.supplierName}</p>
                       <button
@@ -1531,12 +1937,12 @@ export default function DisbursementTracking() {
                       {canMarkReceived ? (
                         <button
                           type="button"
-                          onClick={() => markReceived(row.trackingId)}
+                          onClick={() => markReceived(row)}
                           disabled={actionDisabled}
                           className="inline-flex items-center gap-1.5 rounded-lg bg-green-700 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-60"
                           title={!row.trackingId ? 'Tracking record not matched for this detail' : 'Mark received'}
                         >
-                          {receivingId === row.trackingId ? <RefreshCw size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
+                          {normalizeId(receivingId) === normalizeId(row.trackingId) ? <RefreshCw size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
                           Mark Received
                         </button>
                       ) : (
@@ -1553,6 +1959,8 @@ export default function DisbursementTracking() {
           </table>
         </div>
       </section>
+        </>
+      )}
 
       <TrackingDetailsModal item={viewingItem} onClose={() => setViewingItem(null)} />
     </div>

@@ -676,9 +676,12 @@ export const downloadPdfReport = (report) => {
   const nextPageCapacity = 17
   const rowPages = chunkRowsForPdf(rows, firstPageCapacity, nextPageCapacity)
 
-  if (report.totals?.length && rowPages.length > 0 && rowPages[rowPages.length - 1].length > 12) {
-    const overflow = rowPages[rowPages.length - 1].splice(12)
-    rowPages.push(overflow)
+  if (report.totals?.length && rowPages.length > 0) {
+    const totalsSafeRowLimit = Math.max(5, Math.min(12, 13 - Math.ceil(report.totals.length / 2)))
+    while (rowPages[rowPages.length - 1].length > totalsSafeRowLimit) {
+      const overflow = rowPages[rowPages.length - 1].splice(totalsSafeRowLimit)
+      rowPages.push(overflow)
+    }
   }
 
   const pageCount = rowPages.length

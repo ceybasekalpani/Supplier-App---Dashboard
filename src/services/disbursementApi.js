@@ -68,6 +68,7 @@ const normalizeQueueRow = (row, fallbackType = '') => ({
   issued: Boolean(getValue(row, 'issued')),
   paymentMethod: getValue(row, 'paymentMethod') || '',
   trackingStatus: getValue(row, 'trackingStatus') || '',
+  trackingId: getValue(row, 'trackingId') || getValue(row, 'disbursementRecordId') || getValue(row, 'disbursementTrackingId') || null,
   issuedType: normalizeIssuedType(getValue(row, 'issuedType') || fallbackType),
 })
 
@@ -103,7 +104,7 @@ const buildMockDeliveryNotes = () => ([
     borrowerRole: 'Driver',
     vehicleNo: 'LOCAL-001',
     routeName: 'Route A - Kandy',
-    status: 'issued',
+    status: 'dispatched',
     totalRecords: 3,
     printUrl: '',
   },
@@ -146,7 +147,7 @@ const normalizeTrackingRow = (row) => ({
   issueDate: dateTime(getValue(row, 'issueDate')),
   method: String(getValue(row, 'method') || ''),
   currentStatus: String(getValue(row, 'currentStatus') || 'awaiting').trim().toLowerCase(),
-  completedDate: dateOnly(getValue(row, 'completedDate')),
+  completedDate: dateTime(getValue(row, 'completedDate')),
   completedBy: getValue(row, 'completedBy') || '',
   completedDevice: getValue(row, 'completedDevice') || '',
   deliveryNoteId: getValue(row, 'deliveryNoteId') == null ? null : Number(getValue(row, 'deliveryNoteId')),
@@ -181,6 +182,9 @@ const normalizeDeliveryNoteDetail = (row) => ({
   dispatchedAt: dateTime(getValue(row, 'dispatchedAt') || getValue(row, 'dispatchDate')),
   currentStatus: String(getValue(row, 'currentStatus') || '').trim().toLowerCase(),
   status: String(getValue(row, 'status') || '').trim().toLowerCase(),
+  completedDate: dateTime(getValue(row, 'completedDate') || getValue(row, 'completedAt')),
+  completedBy: getValue(row, 'completedBy') || '',
+  completedDevice: getValue(row, 'completedDevice') || '',
   supplierSignatureReceived: Boolean(getValue(row, 'supplierSignatureReceived')),
   remarks: getValue(row, 'remarks') || '',
 })
@@ -196,7 +200,10 @@ const normalizeDeliveryNote = (row) => ({
   status: String(getValue(row, 'status') || '').trim().toLowerCase(),
   createdBy: getValue(row, 'createdBy') == null ? null : Number(getValue(row, 'createdBy')),
   createdAt: String(getValue(row, 'createdAt') || ''),
-  completedAt: getValue(row, 'completedAt') || '',
+  completedAt: getValue(row, 'completedAt') || getValue(row, 'completedDate') || '',
+  completedDate: getValue(row, 'completedDate') || getValue(row, 'completedAt') || '',
+  completedBy: getValue(row, 'completedBy') || '',
+  completedDevice: getValue(row, 'completedDevice') || '',
   remarks: getValue(row, 'remarks') || '',
   totalRecords: Number(getValue(row, 'totalRecords') || 0),
   totalAmount: Number(getValue(row, 'totalAmount') || 0),
@@ -265,10 +272,10 @@ export const disbursementApi = {
         requestNo: `LOCAL-${requestId}`,
         regNo: '',
         supplierName: 'Local Supplier',
-        issuedDetails: method || 'Issued',
+        issuedDetails: method || 'Dispatched',
         issueDate: new Date().toISOString(),
         method,
-        currentStatus: method === 'Bank Transfer' ? 'completed' : 'awaiting',
+        currentStatus: ['Account Transfer', 'Bank Transfer'].includes(method) ? 'dispatched' : 'awaiting',
       })
     )
   },
@@ -365,7 +372,7 @@ export const disbursementApi = {
         vehicleNo,
         routeName,
         remarks,
-        status: 'issued',
+        status: 'dispatched',
         totalRecords: records.length,
       })
     )
@@ -450,12 +457,16 @@ export const disbursementApi = {
     )
   },
 
-  async markDeliveryNoteCompleted({ id, remarks = '' }) {
+  async markDeliveryNoteCompleted({ id, remarks = '', completedBy = '', completedDevice = '' }) {
     return withMockFallback(
       async () => {
         const response = await adminApiRequest(`/api/Disbursement/delivery-notes/${id}/completed`, {
           method: 'POST',
-          body: JSON.stringify({ remarks }),
+          body: JSON.stringify({
+            remarks,
+            completedBy,
+            completedDevice,
+          }),
         })
 
         return normalizeDeliveryNote(response)
@@ -465,6 +476,9 @@ export const disbursementApi = {
         id,
         status: 'completed',
         completedAt: new Date().toISOString(),
+        completedDate: new Date().toISOString(),
+        completedBy,
+        completedDevice,
         remarks,
       })
     )
