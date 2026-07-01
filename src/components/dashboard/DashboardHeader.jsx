@@ -6,7 +6,7 @@ export default function DashboardHeader({ stats }) {
 
   return (
     <div className="overflow-hidden rounded-lg border border-emerald-100 bg-white shadow-[0_12px_30px_rgba(15,23,42,0.06)] dark:border-slate-700 dark:bg-slate-800">
-      <div className="h-1.5 bg-gradient-to-r from-emerald-500 via-lime-400 to-green-700" />
+      <div className="h-1.5 bg-linear-to-r from-emerald-500 via-lime-400 to-green-700" />
       <div className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-start gap-4">
           <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
