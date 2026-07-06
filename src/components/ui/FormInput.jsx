@@ -8,6 +8,7 @@ export default function FormInput({
   placeholder,
   required = false,
   disabled = false,
+  ...inputProps
 }) {
   return (
     <label className="block">
@@ -21,6 +22,7 @@ export default function FormInput({
         disabled={disabled}
         onChange={onChange}
         placeholder={placeholder}
+        {...inputProps}
         className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 disabled:opacity-70"
         style={{
           backgroundColor: 'var(--theme-inputBg)',

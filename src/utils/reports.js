@@ -68,8 +68,35 @@ const buildSummaryRows = (summary) => {
   `).join('')
 }
 
-export const buildReportHtml = ({ title, subtitle = '', columns, rows, summary = [], totals = [] }) => {
+const buildSignatureHtml = (signatures) => {
+  const items = signatures || []
+  if (items.length === 0) return ''
+
+  return `
+    <div class="section-block signature-section">
+      <table class="signature-table">
+        <tbody>
+          ${items.map(item => `
+            <tr>
+              <td>
+                <div class="signature-line"></div>
+                <div class="signature-label">Date</div>
+              </td>
+              <td>
+                <div class="signature-line"></div>
+                <div class="signature-label">${escapeHtml(item)}</div>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `
+}
+
+export const buildReportHtml = ({ title, subtitle = '', introText = '', closingText = '', tableTitle = 'Detailed Records', reportVariant = '', columns, rows, summary = [], totals = [], signatures = [] }) => {
   const generatedAt = reportDate()
+  const isLetter = reportVariant === 'letter'
 
   return `<!doctype html>
 <html>
@@ -266,6 +293,17 @@ export const buildReportHtml = ({ title, subtitle = '', columns, rows, summary =
     .data-table tbody tr:hover td { background: #eef5e9; }
     .data-table tr { page-break-inside: avoid; }
 
+    .letter-text {
+      border: 1px solid #d9e4d3;
+      background: #fbfdf9;
+      color: #263a2d;
+      font-size: 12px;
+      line-height: 19px;
+      padding: 12px 14px;
+      margin: 0;
+      white-space: pre-line;
+    }
+
     .totals-wrap { display: block; }
     .totals-table {
       width: 46%;
@@ -317,9 +355,115 @@ export const buildReportHtml = ({ title, subtitle = '', columns, rows, summary =
     }
     .footer td { border-top: 1.5px solid #dde6d6; padding-top: 9px; }
     .right { text-align: right; }
+
+    .signature-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 18px 24px;
+      page-break-inside: avoid;
+    }
+    .signature-table td {
+      width: 50%;
+      vertical-align: bottom;
+      color: #243a2d;
+      font-size: 10.5px;
+      font-weight: 700;
+    }
+    .signature-line {
+      border-bottom: 1.4px solid #405548;
+      height: 22px;
+      margin-bottom: 5px;
+    }
+    .signature-label {
+      color: #475c4d;
+      font-size: 9.5px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .35px;
+    }
+
+    .letter-report .page-frame {
+      border: 1px solid #cfd9c8;
+      background: #ffffff;
+    }
+    .letter-report .body-pad { padding: 22px 28px 24px; }
+    .letter-report .hero-grid td { padding: 16px 24px; }
+    .letter-report h1 {
+      font-size: 21px;
+      text-transform: uppercase;
+      letter-spacing: .4px;
+    }
+    .letter-report .report-note { display: none; }
+    .letter-report .section-title {
+      border-left: 0;
+      padding-left: 0;
+      color: #1f3327;
+      font-size: 12px;
+      letter-spacing: .55px;
+    }
+    .letter-report .letter-text {
+      border: 0;
+      background: #ffffff;
+      padding: 0;
+      font-size: 12.8px;
+      line-height: 22px;
+      color: #18271e;
+    }
+    .letter-report .summary {
+      border-spacing: 0;
+      margin-bottom: 18px;
+    }
+    .letter-report .metric {
+      border: 1px solid #c8d2c0;
+      border-left: 0;
+      background: #ffffff;
+      padding: 10px 14px;
+    }
+    .letter-report .metric:first-child { border-left: 1px solid #c8d2c0; }
+    .letter-report .metric-label { color: #455943; }
+    .letter-report .metric-value { color: #183a27; }
+    .letter-report .data-table {
+      font-size: 12px;
+      border: 1.4px solid #566b5b;
+      box-shadow: none;
+    }
+    .letter-report .data-table th {
+      background: #edf4e9;
+      color: #16261d;
+      border: 1px solid #566b5b;
+      padding: 9px 8px;
+      font-size: 11px;
+    }
+    .letter-report .data-table td {
+      border: 1px solid #748377;
+      padding: 9px 10px;
+      font-size: 12px;
+      line-height: 17px;
+      color: #16261d;
+      background: #ffffff;
+    }
+    .letter-report .data-table td:first-child {
+      text-align: center;
+      font-weight: 700;
+    }
+    .letter-report .data-table tbody tr:nth-child(even) td { background: #ffffff; }
+    .letter-report .signature-section {
+      margin-top: 52px;
+    }
+    .letter-report .signature-table {
+      border-spacing: 0;
+      margin-top: 38px;
+    }
+    .letter-report .signature-table td {
+      width: 50%;
+      padding: 0 26px 0 0;
+    }
+    .letter-report .signature-table td:last-child {
+      padding: 0 0 0 80px;
+    }
   </style>
 </head>
-<body>
+<body class="${isLetter ? 'letter-report' : ''}">
   <div class="page-frame">
     <table class="report-shell">
       <tr class="hero">
@@ -354,8 +498,15 @@ export const buildReportHtml = ({ title, subtitle = '', columns, rows, summary =
         </div>
       ` : ''}
 
+      ${introText ? `
+        <div class="section-block">
+          <div class="section-title">Release Statement</div>
+          <p class="letter-text">${escapeHtml(introText)}</p>
+        </div>
+      ` : ''}
+
       <div class="section-block">
-        <div class="section-title">Detailed Records</div>
+        <div class="section-title">${escapeHtml(tableTitle)}</div>
         ${rows.length === 0 ? '<div class="empty">No records available for this report.</div>' : `
           <table class="data-table">
             <colgroup>
@@ -377,6 +528,14 @@ export const buildReportHtml = ({ title, subtitle = '', columns, rows, summary =
           <table class="totals-table">${buildTotalRows(totals)}</table>
         </div>
       ` : ''}
+
+      ${closingText ? `
+        <div class="section-block">
+          <p class="letter-text">${escapeHtml(closingText)}</p>
+        </div>
+      ` : ''}
+
+      ${buildSignatureHtml(signatures)}
 
       <table class="footer">
         <tr>
@@ -534,6 +693,42 @@ const drawPdfTotals = (commands, totals, y) => {
   return y - (totals.length * 20)
 }
 
+const drawPdfLetterText = (commands, text, y) => {
+  if (!text) return y
+
+  const margin = 28
+  const usableWidth = 842 - (margin * 2)
+  const lines = wrapPdfText(text, 126, 8)
+
+  commands.push(drawRect(margin, y - 20 - (lines.length * 12), usableWidth, 24 + (lines.length * 12), [0.98, 0.99, 0.97], [0.8, 0.86, 0.76]))
+  lines.forEach((line, index) => {
+    commands.push(drawText(line, margin + 12, y - 18 - (index * 12), 9.2, { color: [0.14, 0.22, 0.17] }))
+  })
+
+  return y - 34 - (lines.length * 12)
+}
+
+const drawPdfSignatures = (commands, signatures, y) => {
+  if (!signatures?.length) return y
+
+  const margin = 28
+  const usableWidth = 842 - (margin * 2)
+  const colWidth = 220
+  const dateX = margin + 18
+  const signatureX = margin + usableWidth - colWidth - 18
+
+  signatures.forEach((label, index) => {
+    const rowY = y - (index * 48)
+
+    commands.push(drawRect(dateX, rowY, colWidth, 0.8, [0.25, 0.33, 0.28]))
+    commands.push(drawText('Date', dateX, rowY - 13, 7.8, { bold: true, color: [0.28, 0.36, 0.3] }))
+    commands.push(drawRect(signatureX, rowY, colWidth, 0.8, [0.25, 0.33, 0.28]))
+    commands.push(drawText(label, signatureX, rowY - 13, 7.8, { bold: true, color: [0.28, 0.36, 0.3] }))
+  })
+
+  return y - (signatures.length * 48)
+}
+
 const buildPdfPageContent = (report, pageRows, pageIndex, pageCount, startIndex, isLastPage) => {
   const width = 842
   const height = 595
@@ -571,9 +766,15 @@ const buildPdfPageContent = (report, pageRows, pageIndex, pageCount, startIndex,
       y -= Math.ceil(Math.min(report.summary.length, 8) / columnsPerRow) * 39
       y -= 12
     }
+
+    if (report.introText) {
+      commands.push(drawText('Release Statement', margin, y, 11, { bold: true, color: [0.19, 0.37, 0.28] }))
+      y -= 14
+      y = drawPdfLetterText(commands, report.introText, y)
+    }
   }
 
-  commands.push(drawText('Detailed Records', margin, y, 11, { bold: true, color: [0.19, 0.37, 0.28] }))
+  commands.push(drawText(report.tableTitle || 'Detailed Records', margin, y, 11, { bold: true, color: [0.19, 0.37, 0.28] }))
   y -= 18
 
   const tableColumns = report.columns?.length ? report.columns : [{ label: 'Record', value: row => JSON.stringify(row), width: 1 }]
@@ -610,7 +811,10 @@ const buildPdfPageContent = (report, pageRows, pageIndex, pageCount, startIndex,
         const lineStartY = y - 9 - Math.max(0, (2 - cellLines.length) * 3.4)
         cellLines.forEach((line, lineIndex) => {
           const isFirstColumn = index === 0
-          const textCommand = isFirstColumn
+          const shouldCenter = column.align === 'center'
+          const textCommand = shouldCenter
+            ? drawCenteredText(line, x, lineStartY - (lineIndex * 7.4), columnWidth, 7.4, { color: [0.11, 0.16, 0.13] })
+            : isFirstColumn
             ? drawText(line, x + 4, lineStartY - (lineIndex * 7.4), 7.4, { color: [0.11, 0.16, 0.13] })
             : drawCenteredText(line, x, lineStartY - (lineIndex * 7.4), columnWidth, 7.4, { color: [0.11, 0.16, 0.13] })
           commands.push(textCommand)
@@ -623,7 +827,17 @@ const buildPdfPageContent = (report, pageRows, pageIndex, pageCount, startIndex,
 
   if (isLastPage && report.totals?.length > 0) {
     y -= 18
-    drawPdfTotals(commands, report.totals, y)
+    y = drawPdfTotals(commands, report.totals, y)
+  }
+
+  if (isLastPage && report.closingText) {
+    y -= 4
+    y = drawPdfLetterText(commands, report.closingText, y)
+  }
+
+  if (isLastPage && report.signatures?.length > 0) {
+    y -= report.reportVariant === 'letter' ? 34 : 8
+    drawPdfSignatures(commands, report.signatures, y)
   }
 
   drawPdfFooter(commands)
@@ -672,12 +886,15 @@ const createPdf = (pageContents) => {
 export const downloadPdfReport = (report) => {
   const rows = report.rows || []
   const hasTopCards = Boolean(report.summary?.length || report.subtitle)
-  const firstPageCapacity = hasTopCards ? 12 : 17
+  const isLetterReport = Boolean(report.introText || report.closingText || report.signatures?.length)
+  const firstPageCapacity = isLetterReport ? 8 : (hasTopCards ? 12 : 17)
   const nextPageCapacity = 17
   const rowPages = chunkRowsForPdf(rows, firstPageCapacity, nextPageCapacity)
 
-  if (report.totals?.length && rowPages.length > 0) {
-    const totalsSafeRowLimit = Math.max(5, Math.min(12, 13 - Math.ceil(report.totals.length / 2)))
+  if ((report.totals?.length || isLetterReport) && rowPages.length > 0) {
+    const totalsSafeRowLimit = isLetterReport
+      ? 5
+      : Math.max(5, Math.min(12, 13 - Math.ceil(report.totals.length / 2)))
     while (rowPages[rowPages.length - 1].length > totalsSafeRowLimit) {
       const overflow = rowPages[rowPages.length - 1].splice(totalsSafeRowLimit)
       rowPages.push(overflow)

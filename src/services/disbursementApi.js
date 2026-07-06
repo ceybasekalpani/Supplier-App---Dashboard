@@ -22,6 +22,19 @@ const normalizeIssuedType = (issuedType) => {
   return value
 }
 
+const normalizePaymentMethod = (method) => {
+  const value = String(method || '').trim()
+  const lowerValue = value.toLowerCase()
+
+  if (!value) return ''
+  if (lowerValue.includes('cash')) return 'Cash'
+  if (lowerValue.includes('cheque') || lowerValue.includes('check')) return 'Cheque'
+  if (lowerValue.includes('account')) return 'Account Transfer'
+  if (lowerValue.includes('bank')) return 'Bank Transfer'
+
+  return value
+}
+
 const isKnownIssuedType = (value) => ['advance', 'fertilizer', 'fertilizers', 'fertiliser', 'fertilisers', 'item', 'items'].includes(String(value || '').trim().toLowerCase())
 
 const fertilizerNameHints = ['urea', 'compost', 'potash', 'tsp', 'mop', 'npk', 'dolomite', 'phosphate', 'fertilizer', 'fertiliser']
@@ -53,24 +66,34 @@ const dateOnly = (value) => {
 
 const dateTime = (value) => value ? String(value) : ''
 
-const normalizeQueueRow = (row, fallbackType = '') => ({
-  id: Number(getValue(row, 'id') || 0),
-  requestNo: String(getValue(row, 'requestNo') || ''),
-  regNo: String(getValue(row, 'regNo') || ''),
-  supplierName: String(getValue(row, 'supplierName') || ''),
-  route: String(getValue(row, 'route') || ''),
-  approvedDate: dateOnly(getValue(row, 'approvedDate')),
-  approvedAmount: getValue(row, 'approvedAmount') == null ? null : Number(getValue(row, 'approvedAmount')),
-  fertilizerType: getValue(row, 'fertilizerType') || '',
-  itemType: getValue(row, 'itemType') || '',
-  approvedQty: getValue(row, 'approvedQty') == null ? null : Number(getValue(row, 'approvedQty')),
-  unit: String(getValue(row, 'unit') || ''),
-  issued: Boolean(getValue(row, 'issued')),
-  paymentMethod: getValue(row, 'paymentMethod') || '',
-  trackingStatus: getValue(row, 'trackingStatus') || '',
-  trackingId: getValue(row, 'trackingId') || getValue(row, 'disbursementRecordId') || getValue(row, 'disbursementTrackingId') || null,
-  issuedType: normalizeIssuedType(getValue(row, 'issuedType') || fallbackType),
-})
+const normalizeQueueRow = (row, fallbackType = '') => {
+  const issuedType = normalizeIssuedType(getValue(row, 'issuedType') || fallbackType)
+
+  return {
+    id: Number(getValue(row, 'id') || 0),
+    requestNo: String(getValue(row, 'requestNo') || ''),
+    regNo: String(getValue(row, 'regNo') || ''),
+    supplierName: String(getValue(row, 'supplierName') || ''),
+    route: String(getValue(row, 'route') || ''),
+    approvedDate: dateOnly(getValue(row, 'approvedDate')),
+    approvedAmount: getValue(row, 'approvedAmount') == null ? null : Number(getValue(row, 'approvedAmount')),
+    fertilizerType: getValue(row, 'fertilizerType') || '',
+    itemType: getValue(row, 'itemType') || '',
+    approvedQty: getValue(row, 'approvedQty') == null ? null : Number(getValue(row, 'approvedQty')),
+    unit: String(getValue(row, 'unit') || ''),
+    issued: Boolean(getValue(row, 'issued')),
+    paymentMethod: issuedType === 'advance'
+      ? normalizePaymentMethod(
+          getValue(row, 'paymentMethod')
+          || getValue(row, 'payMode', 'PayMode')
+          || getValue(row, 'payment')
+        )
+      : 'Physical Delivery',
+    trackingStatus: getValue(row, 'trackingStatus') || '',
+    trackingId: getValue(row, 'trackingId') || getValue(row, 'disbursementRecordId') || getValue(row, 'disbursementTrackingId') || null,
+    issuedType,
+  }
+}
 
 const normalizeQueueResponse = (response) => ({
   advance: (getValue(response, 'advances') || []).map(row => normalizeQueueRow(row, 'advance')),

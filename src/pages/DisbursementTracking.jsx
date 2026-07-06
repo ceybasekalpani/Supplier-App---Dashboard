@@ -1038,6 +1038,57 @@ export default function DisbursementTracking() {
     }
   }
 
+  const buildStoreReleaseLetter = (issuedType) => {
+    const isFertilizer = issuedType === 'fertilizer'
+    const itemLabel = isFertilizer ? 'Fertilizer' : 'Item'
+    const rows = allReportRows.filter(row => row.issuedType === issuedType)
+    const releaseGroups = Object.values(rows.reduce((acc, row) => {
+      const parsed = parseTrackingValue(row)
+      const name = parsed.name || row.itemName || row.issuedDetails || itemLabel
+      const unit = parsed.unit || row.unit || '-'
+      const key = normalizeText(name)
+
+      if (!acc[key]) {
+        acc[key] = {
+          name,
+          unitTotals: {},
+        }
+      }
+
+      acc[key].unitTotals[unit] = (acc[key].unitTotals[unit] || 0) + Number(parsed.value || 0)
+
+      return acc
+    }, {})).map(group => ({
+      name: group.name,
+      quantityLabel: Object.entries(group.unitTotals)
+        .map(([unit, quantity]) => formatQuantity(quantity, unit === '-' ? '' : unit))
+        .join(', '),
+    })).sort((a, b) => a.name.localeCompare(b.name))
+      .map((group, index) => ({ ...group, no: index + 1 }))
+
+    const releaseName = isFertilizer ? 'fertilizer' : 'item'
+    const releaseLabel = isFertilizer ? 'fertilizer' : 'item'
+
+    return {
+      filename: `${releaseName}-store-release-letter`,
+      title: `${itemLabel} Store Release Letter`,
+      subtitle: `Status: ${statusFilter === 'all' ? 'All' : statusFilter} | Date: ${dateFilter || 'Any'} | Search: ${searchTerm || 'None'}`,
+      reportVariant: 'letter',
+      tableTitle: 'Release Summary',
+      introText: `Approval is requested to release the following ${releaseLabel} quantities from store stock for supplier disbursement. The quantities below are summarized by ${releaseLabel} type, with each ${releaseLabel} type shown once with its total quantity required for release.`,
+      closingText: `Upon authorization, the store may issue the listed ${releaseLabel} quantities according to this release summary.`,
+      rows: releaseGroups,
+      summary: [],
+      totals: [],
+      signatures: ['Authorized Signature'],
+      columns: [
+        { label: 'No', value: 'no', width: 0.45, align: 'center' },
+        { label: `${itemLabel} Name`, value: 'name', width: 2 },
+        { label: 'Total Release Quantity', value: 'quantityLabel', width: 1.15 },
+      ],
+    }
+  }
+
   const buildTrackingReport = () => ({
     filename: 'disbursement-tracking-report',
     title: 'Disbursement Tracking Report',
@@ -1237,6 +1288,22 @@ export default function DisbursementTracking() {
 
     if (report.rows.length === 0) {
       setShowError(`No ${paymentMethodLabels[normalizedPayment] || paymentMethod} records found for the current filters`)
+      setTimeout(() => setShowError(null), 3000)
+      return
+    }
+
+    downloadReport(report, format)
+  }
+
+  const handleStoreReleaseReportFormat = (value) => {
+    if (!value) return
+
+    const [issuedType, format] = value.split(':')
+    const report = buildStoreReleaseLetter(issuedType)
+    const label = issuedType === 'fertilizer' ? 'fertilizer' : 'item'
+
+    if (report.rows.length === 0) {
+      setShowError(`No ${label} records found for the current filters`)
       setTimeout(() => setShowError(null), 3000)
       return
     }
@@ -1481,6 +1548,20 @@ export default function DisbursementTracking() {
               { value: 'bank-transfer:doc', label: 'Bank Transfer DOC' },
             ]}
             className="min-w-44"
+            buttonClassName="bg-white dark:bg-slate-800"
+          />
+          <Combobox
+            value=""
+            onChange={handleStoreReleaseReportFormat}
+            disabled={filteredRows.length === 0}
+            placeholder="Store Release Letter"
+            options={[
+              { value: 'fertilizer:pdf', label: 'Fertilizer Release PDF' },
+              { value: 'fertilizer:doc', label: 'Fertilizer Release DOC' },
+              { value: 'items:pdf', label: 'Item Release PDF' },
+              { value: 'items:doc', label: 'Item Release DOC' },
+            ]}
+            className="min-w-52"
             buttonClassName="bg-white dark:bg-slate-800"
           />
           <Combobox

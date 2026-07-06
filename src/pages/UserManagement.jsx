@@ -7,7 +7,9 @@ import Combobox from '../components/ui/Combobox';
 import FormInput from '../components/ui/FormInput';
 import StatusBadge from '../components/ui/StatusBadge';
 import { sanitizeText, validateUserForm } from '../utils/validation';
+import { useAuthenticatedImageSrc } from '../utils/useAuthenticatedImageSrc';
 import { dashboardUsersApi } from '../services/dashboardUsersApi';
+import { adminAuthStorage } from '../services/adminApiClient';
 
 const UserManagement = () => {
   const [users, setUsers] = useState([]);
@@ -20,6 +22,8 @@ const UserManagement = () => {
     fullName: '', email: '', username: '', password: '', phoneNo: '', role: 'Admin', status: 'active'
   });
   const [imagePreview, setImagePreview] = useState(null);
+  const [selectedProfileFile, setSelectedProfileFile] = useState(null);
+  const [removeProfileImage, setRemoveProfileImage] = useState(false);
   const [showFormPassword, setShowFormPassword] = useState(false);
   const [visiblePasswordUserId, setVisiblePasswordUserId] = useState(null);
   const [errors, setErrors] = useState({});
@@ -57,7 +61,12 @@ const UserManagement = () => {
     };
   }, [searchTerm, statusFilter]);
 
+  useEffect(() => () => {
+    if (imagePreview?.startsWith('blob:')) URL.revokeObjectURL(imagePreview);
+  }, [imagePreview]);
+
   const filteredUsers = users;
+  const resolvedImagePreview = useAuthenticatedImageSrc(imagePreview);
 
   const validateForm = () => {
     const newErrors = validateUserForm(formData, { editing: Boolean(editingUser) });
@@ -65,20 +74,115 @@ const UserManagement = () => {
     return Object.keys(newErrors).length === 0;
   };
 
+  const setPreviewUrl = (url) => {
+    setImagePreview(previous => {
+      if (previous?.startsWith('blob:')) URL.revokeObjectURL(previous);
+      return url;
+    });
+  };
+
+  // `avatarAuthoritative` must only be set for responses that come from the
+  // profile-image endpoints. The basic create/update endpoint doesn't return
+  // avatar data, so blindly spreading it would null out an existing avatar.
+  const mergeUser = (baseUser, nextUser, { avatarAuthoritative = false } = {}) => ({
+    ...baseUser,
+    ...nextUser,
+    name: nextUser.name || nextUser.fullName || baseUser.name,
+    fullName: nextUser.fullName || nextUser.name || baseUser.fullName,
+    email: nextUser.email || baseUser.email,
+    username: nextUser.username || baseUser.username,
+    phoneNo: nextUser.phoneNo ?? baseUser.phoneNo,
+    role: nextUser.role || baseUser.role,
+    status: nextUser.status || baseUser.status,
+    password: nextUser.password || baseUser.password,
+    avatar: avatarAuthoritative ? nextUser.avatar : baseUser.avatar,
+    profileImage: avatarAuthoritative ? nextUser.profileImage : baseUser.profileImage,
+    avatarUrl: avatarAuthoritative ? nextUser.avatarUrl : baseUser.avatarUrl,
+    avatarFallback: avatarAuthoritative ? nextUser.avatarFallback : baseUser.avatarFallback,
+  });
+
+  const syncCurrentAdminProfile = (user) => {
+    const currentAdmin = adminAuthStorage.getUser();
+    if (!currentAdmin || String(currentAdmin.id || currentAdmin.adminId) !== String(user.id)) return;
+
+    adminAuthStorage.setUser({
+      ...currentAdmin,
+      fullName: user.fullName || user.name || currentAdmin.fullName,
+      avatar: user.avatar ?? null,
+      avatarUrl: user.avatarUrl ?? null,
+      profileImage: user.profileImage ?? user.avatar ?? null,
+    });
+  };
+
+  const toFormData = (user) => ({
+    fullName: user.fullName || user.name || '',
+    email: user.email || '',
+    username: user.username || '',
+    password: '',
+    phoneNo: user.phoneNo || '',
+    role: user.role || 'Admin',
+    status: user.status || 'active',
+  });
+
+  const applyProfileImageChange = async (user) => {
+    if (selectedProfileFile) {
+      try {
+        const updatedUser = mergeUser(user, await dashboardUsersApi.uploadProfileImage(user.id, selectedProfileFile), { avatarAuthoritative: true });
+        showToast('User saved and profile image uploaded successfully.');
+        return { user: updatedUser, imageError: null };
+      } catch (error) {
+        showToast(error.message || 'User saved, but profile image upload failed. Check Supabase storage configuration.', 'error');
+        return { user, imageError: error };
+      }
+    }
+
+    if (removeProfileImage) {
+      try {
+        const updatedUser = mergeUser(user, await dashboardUsersApi.clearProfileImage(user.id), { avatarAuthoritative: true });
+        showToast('User saved and profile image removed.');
+        return { user: updatedUser, imageError: null };
+      } catch (error) {
+        showToast(error.message || 'User saved, but profile image could not be removed.', 'error');
+        return { user, imageError: error };
+      }
+    }
+
+    return { user, imageError: null };
+  };
+
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
-      if (file.size > 2 * 1024 * 1024) return alert('Image size must be less than 2MB');
-      if (!file.type.startsWith('image/')) return alert('Only image files are allowed');
-      const reader = new FileReader();
-      reader.onloadend = () => { setImagePreview(reader.result); };
-      reader.readAsDataURL(file);
+      if (file.size > 5 * 1024 * 1024) {
+        showToast('Profile image must be smaller than 5 MB.', 'error');
+        e.target.value = '';
+        return;
+      }
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+        showToast('Profile image must be JPG, PNG, or WebP.', 'error');
+        e.target.value = '';
+        return;
+      }
+
+      setSelectedProfileFile(file);
+      setRemoveProfileImage(false);
+      setPreviewUrl(URL.createObjectURL(file));
     }
+  };
+
+  const clearSelectedProfileImage = () => {
+    setSelectedProfileFile(null);
+    setRemoveProfileImage(Boolean(editingUser?.avatar || editingUser?.avatarUrl));
+    setPreviewUrl(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const resetForm = () => {
     setFormData({ fullName: '', email: '', username: '', password: '', phoneNo: '', role: 'Admin', status: 'active' });
-    setImagePreview(null); setEditingUser(null); setErrors({}); setShowFormPassword(false);
+    setPreviewUrl(null);
+    setSelectedProfileFile(null);
+    setRemoveProfileImage(false);
+    setEditingUser(null); setErrors({}); setShowFormPassword(false);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -94,15 +198,17 @@ const UserManagement = () => {
       email: sanitizeText(formData.email),
       username: sanitizeText(formData.username),
       phoneNo: sanitizeText(formData.phoneNo),
-      avatar: imagePreview || editingUser?.avatar || null,
     };
 
     try {
       if (editingUser) {
-        const updated = await dashboardUsersApi.update(editingUser.id, payload);
+        const baseUpdated = await dashboardUsersApi.update(editingUser.id, payload);
+        const { user: updated, imageError } = await applyProfileImageChange(mergeUser(editingUser, baseUpdated));
+
         const previousStatus = editingUser.status;
 
         setUsers(previous => previous.map(user => user.id === editingUser.id ? updated : user));
+        syncCurrentAdminProfile(updated);
         if (previousStatus !== updated.status) {
           setSummary(previous => ({
             ...previous,
@@ -110,20 +216,37 @@ const UserManagement = () => {
             inactiveUsers: previous.inactiveUsers + (updated.status === 'inactive' ? 1 : 0) - (previousStatus === 'inactive' ? 1 : 0),
           }));
         }
-        showToast('User updated successfully.');
+        if (!selectedProfileFile && !removeProfileImage) showToast('User updated successfully.');
+        if (imageError) {
+          setEditingUser(updated);
+          setFormData(toFormData(updated));
+          setShowFormPassword(false);
+          return;
+        }
       } else {
-        const created = await dashboardUsersApi.create(payload);
+        const baseCreated = await dashboardUsersApi.create(payload);
+        const { user: created, imageError } = await applyProfileImageChange(baseCreated);
+
         setUsers(previous => [created, ...previous]);
         setSummary(previous => ({
           totalAdministrators: previous.totalAdministrators + 1,
           activeUsers: previous.activeUsers + (created.status === 'active' ? 1 : 0),
           inactiveUsers: previous.inactiveUsers + (created.status === 'inactive' ? 1 : 0),
         }));
-        showToast('User created successfully.');
+        if (!selectedProfileFile) showToast('User created successfully.');
+        if (imageError) {
+          setEditingUser(created);
+          setFormData(toFormData(created));
+          setShowFormPassword(false);
+          return;
+        }
       }
       resetForm();
     } catch (error) {
-      showToast(error.message || 'Unable to save dashboard user', 'error');
+      const conflictMessage = error.status === 409
+        ? 'Username or email already exists. Use a unique username and email address.'
+        : error.message || 'Unable to save dashboard user';
+      showToast(conflictMessage, 'error');
     } finally {
       setSaving(false);
     }
@@ -131,8 +254,11 @@ const UserManagement = () => {
 
   const handleEdit = (user) => {
     setEditingUser(user);
-    setFormData({ fullName: user.name, email: user.email, username: user.username, password: '', phoneNo: user.phoneNo || '', role: user.role, status: user.status });
-    setImagePreview(user.avatar || null); setErrors({});
+    setFormData(toFormData(user));
+    setSelectedProfileFile(null);
+    setRemoveProfileImage(false);
+    setPreviewUrl(user.profileImage || user.avatar || null); setErrors({});
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleDelete = async () => {
@@ -233,7 +359,7 @@ const UserManagement = () => {
                     <tr key={user.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-3">
-                          <Avatar name={user.name} size="sm" src={user.avatar} />
+                          <Avatar name={user.name} size="sm" src={user.profileImage || user.avatar} fallbackSrc={user.avatarFallback} />
                           <div>
                             <p className="font-medium text-slate-900 dark:text-white">{user.name}</p>
                             <p className="text-xs text-slate-500 dark:text-slate-400">{user.email}</p>
@@ -284,11 +410,11 @@ const UserManagement = () => {
             {/* Avatar Upload */}
             <div className="flex justify-center">
               <div className="relative">
-                <button onClick={() => fileInputRef.current?.click()} className="w-24 h-24 rounded-full border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center text-slate-400 hover:border-emerald-500 hover:text-emerald-500 transition-colors overflow-hidden bg-slate-50 dark:bg-slate-700/30">
-                  {imagePreview ? <img src={imagePreview} alt="Profile" className="w-full h-full object-cover" /> : <Camera size={28} />}
+                <button type="button" onClick={() => fileInputRef.current?.click()} className="w-24 h-24 rounded-full border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center text-slate-400 hover:border-emerald-500 hover:text-emerald-500 transition-colors overflow-hidden bg-slate-50 dark:bg-slate-700/30">
+                  {resolvedImagePreview ? <img src={resolvedImagePreview} alt="Profile" className="w-full h-full object-cover" /> : <Camera size={28} />}
                 </button>
-                {imagePreview && <button onClick={() => { setImagePreview(null); if(fileInputRef.current) fileInputRef.current.value = ''; }} className="absolute -top-1 -right-1 bg-rose-500 text-white rounded-full p-0.5"><X size={12} /></button>}
-                <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+                {imagePreview && <button type="button" onClick={clearSelectedProfileImage} className="absolute -top-1 -right-1 bg-rose-500 text-white rounded-full p-0.5"><X size={12} /></button>}
+                <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={handleImageUpload} className="hidden" />
               </div>
             </div>
 
@@ -296,18 +422,24 @@ const UserManagement = () => {
             <div className="space-y-3">
               {['fullName', 'email', 'username', 'phoneNo'].map((field) => {
                 const label = { fullName: 'Full Name', email: 'Email Address', username: 'Username', phoneNo: 'Phone Number' }[field];
-                const required = field !== 'phoneNo';
+                const inputType = field === 'email' ? 'email' : field === 'phoneNo' ? 'tel' : 'text';
                 return (
                   <FormInput
                     key={field}
                     label={label}
                     name={field}
-                    type="text"
+                    type={inputType}
                     value={formData[field]}
-                    required={required}
+                    required
                     error={errors[field]}
                     placeholder={`Enter ${label.toLowerCase()}`}
-                    onChange={(e) => setFormData(prev => ({ ...prev, [field]: e.target.value }))}
+                    inputMode={field === 'phoneNo' ? 'numeric' : undefined}
+                    maxLength={field === 'phoneNo' ? 10 : undefined}
+                    autoComplete={field === 'email' ? 'email' : field === 'username' ? 'username' : field === 'phoneNo' ? 'tel' : 'name'}
+                    onChange={(e) => {
+                      const value = field === 'phoneNo' ? e.target.value.replace(/\D/g, '').slice(0, 10) : e.target.value;
+                      setFormData(prev => ({ ...prev, [field]: value }));
+                    }}
                   />
                 );
               })}
@@ -343,7 +475,9 @@ const UserManagement = () => {
               </div>
               <div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Status</label>
+                  <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
+                    Status <span className="text-rose-500">*</span>
+                  </label>
                   <Combobox
                     value={formData.status}
                     onChange={(value) => setFormData(prev => ({ ...prev, status: value }))}
@@ -353,6 +487,7 @@ const UserManagement = () => {
                     ]}
                     buttonClassName="border-slate-300 bg-white py-2 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-white"
                   />
+                  {errors.status && <p className="mt-1 text-xs text-rose-500">{errors.status}</p>}
                 </div>
               </div>
             </div>

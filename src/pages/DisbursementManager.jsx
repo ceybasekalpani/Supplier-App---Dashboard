@@ -49,14 +49,14 @@ const formatQuantity = (value, unit) => `${Number(value || 0).toLocaleString()} 
 const rowKey = (type, id) => `${type}-${id}`
 
 const isPhysicalAdvance = (row, paymentMethods) => (
-  row.issuedType === 'advance' && ['Cash', 'Cheque'].includes(paymentMethods[row.id])
+  row.issuedType === 'advance' && getAdvanceMethod(row, paymentMethods) === 'Cash'
 )
 
 const isDeliveryNoteEligible = (row, paymentMethods) => (
   row.issuedType === 'fertilizer' || row.issuedType === 'items' || isPhysicalAdvance(row, paymentMethods)
 )
 
-const isTransferAdvanceMethod = (method) => ['Account Transfer', 'Bank Transfer'].includes(method)
+const isNonCashAdvanceMethod = (method) => ['Account Transfer', 'Bank Transfer', 'Cheque'].includes(method)
 
 const getRowLabel = (row) => {
   if (row.issuedType === 'advance') return 'Advance'
@@ -70,9 +70,15 @@ const getRowValue = (row) => {
 }
 
 const getReportPaymentMethod = (row, paymentMethods) => {
-  if (row.issuedType !== 'advance') return row.paymentMethod || 'Physical Delivery'
-  return paymentMethods[row.id] || row.paymentMethod || 'Not Selected'
+  if (row.issuedType !== 'advance') return 'Physical Delivery'
+  return getAdvanceMethod(row, paymentMethods) || 'Not Selected'
 }
+
+const getAdvanceMethod = (row, paymentMethods) => (
+  Object.prototype.hasOwnProperty.call(paymentMethods, row.id)
+    ? paymentMethods[row.id]
+    : row.paymentMethod || ''
+)
 
 const getReportSupplier = (row) => (
   row.route ? `${row.supplierName} / ${row.route}` : row.supplierName
@@ -287,7 +293,7 @@ function DisbursementTable({
   const config = typeConfig[type]
   const Icon = config.icon
   const selectableRows = rows.filter(row => (
-    !row.issued && (type !== 'advance' || Boolean(paymentMethods[row.id]))
+    !row.issued && isDeliveryNoteEligible(row, paymentMethods)
   ))
   const selectedCount = selectableRows.filter(row => selectedRows[rowKey(type, row.id)]).length
   const allSelected = selectableRows.length > 0 && selectedCount === selectableRows.length
@@ -361,8 +367,8 @@ function DisbursementTable({
             ) : rows.map(row => {
               const key = rowKey(type, row.id)
               const selected = Boolean(selectedRows[key])
-              const method = type === 'advance' ? paymentMethods[row.id] : 'Physical Delivery'
-              const canSelect = !row.issued && (type !== 'advance' || Boolean(method))
+              const method = type === 'advance' ? getAdvanceMethod(row, paymentMethods) : 'Physical Delivery'
+              const canSelect = !row.issued && isDeliveryNoteEligible(row, paymentMethods)
               const status = getManagementStatus(row)
 
               return (
@@ -390,13 +396,13 @@ function DisbursementTable({
                     {type === 'advance' && !row.issued ? (
                       <div className="flex flex-wrap items-center gap-2">
                         <Combobox
-                          value={paymentMethods[row.id] || ''}
+                          value={method}
                           onChange={(value) => onPaymentMethod(row.id, value)}
                           options={paymentOptions}
                           className="min-w-44"
                           buttonClassName="bg-slate-50 py-1.5 text-sm dark:bg-slate-700"
                         />
-                        {isTransferAdvanceMethod(method) && (
+                        {isNonCashAdvanceMethod(method) && (
                           <button
                             type="button"
                             onClick={() => onIssueTransfer(row)}
@@ -404,12 +410,12 @@ function DisbursementTable({
                             className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-70"
                           >
                             {issuingKey === key ? <RefreshCw size={12} className="animate-spin" /> : <Send size={12} />}
-                            Dispatch Transfer
+                            Dispatch Payment
                           </button>
                         )}
                       </div>
                     ) : (
-                      <span className="text-slate-600 dark:text-slate-300">{row.paymentMethod || method}</span>
+                      <span className="text-slate-600 dark:text-slate-300">{method}</span>
                     )}
                   </td>
                   <td className="px-4 py-3">
@@ -499,7 +505,7 @@ export default function DisbursementManager() {
       .map(selection => {
         const row = allRows.find(item => item.issuedType === selection.issuedType && item.id === selection.id)
         if (!row) return null
-        const method = row.issuedType === 'advance' ? paymentMethods[row.id] : 'Physical Delivery'
+        const method = row.issuedType === 'advance' ? getAdvanceMethod(row, paymentMethods) : 'Physical Delivery'
         return { ...row, method }
       })
       .filter(Boolean)
@@ -563,7 +569,7 @@ export default function DisbursementManager() {
 
   const issueBankTransfer = async (row) => {
     const key = rowKey('advance', row.id)
-    const method = paymentMethods[row.id] || row.paymentMethod || 'Bank Transfer'
+    const method = getAdvanceMethod(row, paymentMethods) || 'Bank Transfer'
     setIssuingKey(key)
     setShowError(null)
 
@@ -661,7 +667,7 @@ export default function DisbursementManager() {
             ? {
                 ...row,
                 issued: true,
-                paymentMethod: dispatchedMethods[rowKey(type, row.id)] || (type === 'advance' ? paymentMethods[row.id] : 'Physical Delivery'),
+                paymentMethod: dispatchedMethods[rowKey(type, row.id)] || (type === 'advance' ? getAdvanceMethod(row, paymentMethods) : 'Physical Delivery'),
                 trackingStatus: 'dispatched',
                 trackingId: dispatchedTrackingIds[rowKey(type, row.id)] || row.trackingId || null,
               }
@@ -760,7 +766,7 @@ export default function DisbursementManager() {
 
   const filteredAdvances = advancesState.filter(row => {
     if (advancePaymentFilter === 'all') return true
-    const method = paymentMethods[row.id] || row.paymentMethod || ''
+    const method = getAdvanceMethod(row, paymentMethods)
     if (advancePaymentFilter === 'unselected') return !method
     return method === advancePaymentFilter
   }).filter(row => matchesStatusFilter(row, statusFilter))
@@ -997,7 +1003,7 @@ export default function DisbursementManager() {
       />
 
       <div className="rounded-xl border border-slate-200 bg-white px-5 py-4 text-sm text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-        <span className="font-semibold text-slate-900 dark:text-white">{issuedTotalCount}</span> records already dispatched. Cash and cheque advances, fertilizer, and item records are saved to delivery notes; bank transfers stay outside the delivery note.
+        <span className="font-semibold text-slate-900 dark:text-white">{issuedTotalCount}</span> records already dispatched. Only cash advances, fertilizer, and item records are saved to delivery notes; cheque, account transfer, and bank transfer payments stay outside the delivery note.
       </div>
 
       {showReview && (

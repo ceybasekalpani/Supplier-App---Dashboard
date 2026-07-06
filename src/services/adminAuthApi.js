@@ -12,6 +12,14 @@ const normalizeBoolean = value => value === true || String(value).toLowerCase() 
 
 const isMainAdminUsername = username => ['admin', 'mainadmin', 'main_admin'].includes(String(username || '').trim().toLowerCase())
 
+const toProfileImageDisplayUrl = (id, avatar) => (
+  /^(data:|blob:)/i.test(String(avatar || ''))
+    ? avatar
+    : id && avatar
+    ? `${API_BASE_URL}/api/DashboardUsers/${id}/profile-image`
+    : avatar || null
+)
+
 export const adminAuthApi = {
   async login({ username, password }) {
     adminAuthStorage.removeToken()
@@ -49,11 +57,16 @@ export const adminAuthApi = {
     const hasPermissionData = Boolean(rawPermissionKeys || rawModulePermissions || rawSubPermissions)
 
     const usernameValue = getValue(data, 'username') || username
+    const adminId = getValue(data, 'adminId') ?? getValue(data, 'id')
+    const avatar = getValue(data, 'avatar') || getValue(data, 'profileImage') || null
     const user = {
-      adminId: getValue(data, 'adminId'),
-      id: getValue(data, 'adminId') ?? getValue(data, 'id'),
+      adminId,
+      id: adminId,
       username: usernameValue,
       fullName: getValue(data, 'fullName'),
+      avatar: toProfileImageDisplayUrl(adminId, avatar),
+      avatarUrl: avatar,
+      profileImage: toProfileImageDisplayUrl(adminId, avatar),
       expiresAt: getValue(data, 'expiresAt'),
       isSuperAdmin: normalizeBoolean(getValue(data, 'isSuperAdmin')) || isMainAdminUsername(usernameValue),
       hasPermissionData,

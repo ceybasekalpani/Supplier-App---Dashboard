@@ -9,6 +9,36 @@ const getValue = (source, camelKey, pascalKey = camelKey[0].toUpperCase() + came
   source?.[camelKey] ?? source?.[pascalKey]
 )
 
+const API_BASE_URL = env.apiBaseUrl || env.API_BASE_URL || ''
+
+// const toProfileImageDisplayUrl = (id, avatar, cacheKey = '') => {
+//   if (!id || !avatar) return avatar || null
+//   const value = String(avatar).trim()
+//   if (/^(data:|blob:)/i.test(value)) return value
+//   if (/^https?:\/\//i.test(value)) {
+//     if (!cacheKey) return value
+//     const separator = value.includes('?') ? '&' : '?'
+//     return `${value}${separator}v=${encodeURIComponent(cacheKey)}`
+//   }
+//   const separator = cacheKey ? `?v=${encodeURIComponent(cacheKey)}` : ''
+//   return `${API_BASE_URL}/api/DashboardUsers/${id}/profile-image${separator}`
+// }
+
+  const toProfileImageDisplayUrl = (id, avatar, cacheKey = '') => {
+  if (!avatar) return null
+  const value = String(avatar).trim()
+  if (/^(data:|blob:)/i.test(value)) return value
+  if (!id) return value
+  // Always route through our backend proxy instead of the raw Supabase URL
+  return toProfileImageEndpointUrl(id, cacheKey || Date.now())
+}
+
+const toProfileImageEndpointUrl = (id, cacheKey = Date.now()) => {
+  if (!id) return null
+  const separator = cacheKey ? `?v=${encodeURIComponent(cacheKey)}` : ''
+  return `${API_BASE_URL}/api/DashboardUsers/${id}/profile-image${separator}`
+}
+
 const dateOnly = (value) => {
   if (!value) return ''
   return String(value).slice(0, 10)
@@ -17,9 +47,14 @@ const dateOnly = (value) => {
 const normalizeUser = (row) => {
   const fullName = String(getValue(row, 'fullName') || getValue(row, 'name') || '')
   const password = getValue(row, 'password') || getValue(row, 'plainPassword') || getValue(row, 'temporaryPassword') || ''
+  const id = Number(getValue(row, 'id') || 0)
+  const avatar = getValue(row, 'avatar') || getValue(row, 'avatarUrl') || getValue(row, 'profileImage') || null
+  const cacheKey = getValue(row, 'updatedAt') || getValue(row, 'lastLoginAt') || ''
+  const displayAvatar = toProfileImageDisplayUrl(id, avatar, cacheKey)
+  const endpointAvatar = avatar ? toProfileImageEndpointUrl(id, cacheKey) : null
 
   return {
-    id: Number(getValue(row, 'id') || 0),
+    id,
     name: fullName,
     fullName,
     email: String(getValue(row, 'email') || ''),
@@ -27,11 +62,28 @@ const normalizeUser = (row) => {
     phoneNo: String(getValue(row, 'phoneNo') || ''),
     role: String(getValue(row, 'role') || 'Admin'),
     status: String(getValue(row, 'status') || 'active').trim().toLowerCase(),
-    avatar: getValue(row, 'avatar') || null,
+    avatar: displayAvatar,
+    avatarFallback: endpointAvatar && endpointAvatar !== displayAvatar ? endpointAvatar : null,
+    avatarUrl: avatar,
+    profileImage: displayAvatar,
     password: password ? String(password) : '',
     isSuperAdmin: getValue(row, 'isSuperAdmin') === true || String(getValue(row, 'isSuperAdmin')).toLowerCase() === 'true',
     createdAt: dateOnly(getValue(row, 'createdAt')),
     lastLoginAt: dateOnly(getValue(row, 'lastLoginAt')),
+  }
+}
+
+const withProfileCacheBust = (user) => {
+  if (!user?.id) return user
+
+  const displayUrl = user.avatarUrl
+    ? toProfileImageDisplayUrl(user.id, user.avatarUrl, Date.now())
+    : toProfileImageEndpointUrl(user.id)
+  return {
+    ...user,
+    avatar: displayUrl,
+    profileImage: displayUrl,
+    avatarUrl: user.avatarUrl || displayUrl,
   }
 }
 
@@ -90,7 +142,7 @@ const normalizeResponse = (response = {}) => ({
   roles: (getValue(response, 'roles') || []).map(role => String(role)),
 })
 
-const buildUserPayload = ({ fullName, email, username, password, phoneNo, role, status, avatar }, { editing = false } = {}) => ({
+const buildUserPayload = ({ fullName, email, username, password, phoneNo, role, status }, { editing = false } = {}) => ({
   fullName: fullName.trim(),
   email: email.trim(),
   username: username.trim(),
@@ -98,8 +150,8 @@ const buildUserPayload = ({ fullName, email, username, password, phoneNo, role, 
   phoneNo: phoneNo?.trim() || null,
   role,
   status,
-  avatar: avatar || null,
 })
+
 
 const buildMockResponse = ({ search = '', status = '' } = {}) => {
   const term = String(search || '').trim().toLowerCase()
@@ -192,6 +244,64 @@ export const dashboardUsersApi = {
         id,
         name: form.fullName,
       }), form.password)
+    )
+  },
+
+  async uploadProfileImage(id, file) {
+    const formData = new FormData()
+    formData.append('image', file)
+
+    return withMockFallback(
+      async () => {
+        const response = await adminApiRequest(`/api/DashboardUsers/${id}/profile-image`, {
+          method: 'PUT',
+          body: formData,
+        })
+
+        return withProfileCacheBust(rememberPassword(normalizeUser(response), readSavedPasswords()[id]?.password))
+      },
+      () => {
+        const previewUrl = URL.createObjectURL(file)
+        return {
+          id,
+          avatar: previewUrl,
+          profileImage: previewUrl,
+          avatarUrl: previewUrl,
+        }
+      }
+    )
+  },
+
+  async clearProfileImage(id) {
+    return withMockFallback(
+      async () => {
+        const response = await adminApiRequest(`/api/DashboardUsers/${id}/profile-image`, {
+          method: 'DELETE',
+        })
+
+        return rememberPassword(normalizeUser(response), readSavedPasswords()[id]?.password)
+      },
+      () => ({
+        id,
+        avatar: null,
+        profileImage: null,
+        avatarUrl: null,
+      })
+    )
+  },
+
+  async checkProfileImageStorage() {
+    return withMockFallback(
+      () => adminApiRequest('/api/Settings/storage-check', {
+        method: 'GET',
+      }),
+      () => ({
+        bucketName: 'profile-images',
+        bucketsStatus: 200,
+        objectsStatus: 200,
+        testUploadStatus: 200,
+        testUploadResponse: 'Mock storage check passed.',
+      })
     )
   },
 

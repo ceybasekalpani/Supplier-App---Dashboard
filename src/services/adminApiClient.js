@@ -51,10 +51,11 @@ export const adminAuthStorage = {
 
 export async function adminApiRequest(path, options = {}) {
   const token = adminAuthStorage.getToken()
+  const isFormDataBody = typeof FormData !== 'undefined' && options.body instanceof FormData
 
   const headers = {
     Accept: 'application/json',
-    ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+    ...(options.body && !isFormDataBody ? { 'Content-Type': 'application/json' } : {}),
     ...(options.headers || {}),
   }
 

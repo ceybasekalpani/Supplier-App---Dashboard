@@ -1,10 +1,14 @@
 import { Sun, Moon } from 'lucide-react'
 import { env } from '../../config/env'
 import { useTheme } from '../../context/useTheme'
+import { adminAuthStorage } from '../../services/adminApiClient'
 import Avatar from '../ui/Avatar'
 
 export default function Topbar({ pageTitle }) {
   const { dark, setDark } = useTheme()
+  const currentAdmin = adminAuthStorage.getUser()
+  const adminName = currentAdmin?.fullName || currentAdmin?.username || 'Dashboard Admin'
+  const adminAvatar = currentAdmin?.profileImage || currentAdmin?.avatar || null
 
   return (
     <header
@@ -24,7 +28,7 @@ export default function Topbar({ pageTitle }) {
           {dark ? <Sun size={16} /> : <Moon size={16} />}
         </button>
 
-        <Avatar name="Rajitha Admin" size="sm" />
+        <Avatar name={adminName} size="sm" src={adminAvatar} />
       </div>
     </header>
   )

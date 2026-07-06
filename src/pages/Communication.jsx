@@ -19,6 +19,7 @@ import StatusBadge, { getStatusPalette } from '../components/ui/StatusBadge'
 import { useTheme } from '../context/useTheme'
 import Toggle from '../components/ui/Toggle'
 import { communicationsApi } from '../services/communicationsApi'
+import { supplierDashboardApi } from '../services/supplierDashboardApi'
 import Combobox from '../components/ui/Combobox'
 
 const tabs = [
@@ -28,6 +29,7 @@ const tabs = [
 
 const audienceOptions = [
   { value: 'AllSuppliers', label: 'All suppliers' },
+  { value: 'Route', label: 'Route wise' },
   { value: 'SpecificSupplier', label: 'Specific supplier' },
 ]
 
@@ -86,6 +88,25 @@ function countStatus(items, status) {
 
 const isValidRegNo = value => /^\d+$/.test(String(value || '').trim())
 
+const emptyNewsForm = () => ({ title: '', description: '', expiryDate: '', audienceType: 'AllSuppliers', targetRegNo: '', targetRoute: '' })
+
+const emptyNotifForm = () => ({ title: '', message: '', schedule: '', type: 'General', audienceType: 'AllSuppliers', targetRegNo: '', targetRoute: '' })
+
+const getAudienceLabel = (item) => {
+  if (item.audienceType === 'SpecificSupplier') return `Supplier ${item.targetRegNo || '-'}`
+  if (item.audienceType === 'Route') return `Route ${item.targetRoute || '-'}`
+  return 'All suppliers'
+}
+
+const isWithinDeleteWindow = (item) => {
+  const sourceDate = item.createdAt || item.created || item.sentAt || item.scheduledFor
+  const createdTime = new Date(sourceDate).getTime()
+
+  if (!sourceDate || Number.isNaN(createdTime)) return false
+
+  return Date.now() - createdTime <= 24 * 60 * 60 * 1000
+}
+
 function FilterButton({ filter, activeFilter, count, onClick }) {
   const isActive = filter === activeFilter
   const { dark } = useTheme()
@@ -135,8 +156,8 @@ export default function Communication() {
   const [active, setActive] = useState(true)
   const [newsItems, setNewsItems] = useState([])
   const [notifications, setNotifications] = useState([])
-  const [newsForm, setNewsForm] = useState({ title: '', description: '', expiryDate: '', audienceType: 'AllSuppliers', targetRegNo: '' })
-  const [notifForm, setNotifForm] = useState({ title: '', message: '', schedule: '', type: 'General', audienceType: 'AllSuppliers', targetRegNo: '' })
+  const [newsForm, setNewsForm] = useState(emptyNewsForm)
+  const [notifForm, setNotifForm] = useState(emptyNotifForm)
   const [editingNews, setEditingNews] = useState(null)
   const [editingNotif, setEditingNotif] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -144,6 +165,7 @@ export default function Communication() {
   const [deletingKey, setDeletingKey] = useState('')
   const [refreshKey, setRefreshKey] = useState(0)
   const [toast, setToast] = useState(null)
+  const [routeOptions, setRouteOptions] = useState([])
 
   const filteredNews = newsItems.filter(item => newsFilter === 'all' || item.status === newsFilter)
   const filteredNotifications = notifications.filter(item => notifFilter === 'all' || item.status === notifFilter)
@@ -178,11 +200,39 @@ export default function Communication() {
     }
   }, [refreshKey])
 
+  useEffect(() => {
+    const controller = new AbortController()
+
+    supplierDashboardApi
+      .listSuppliers({
+        search: '',
+        months: 1,
+        activeOnly: false,
+        signal: controller.signal,
+      })
+      .then(response => {
+        const routes = Array.from(new Set(
+          (response.suppliers || [])
+            .map(supplier => supplier.route)
+            .filter(Boolean)
+        )).sort()
+
+        setRouteOptions(routes.map(route => ({ value: route, label: route })))
+      })
+      .catch(error => {
+        if (error.name !== 'AbortError') {
+          showToast(error.message || 'Unable to load supplier routes.', 'error')
+        }
+      })
+
+    return () => controller.abort()
+  }, [])
+
   const handleDiscard = () => {
     setEditingNews(null)
     setEditingNotif(null)
-    setNewsForm({ title: '', description: '', expiryDate: '', audienceType: 'AllSuppliers', targetRegNo: '' })
-    setNotifForm({ title: '', message: '', schedule: '', type: 'General', audienceType: 'AllSuppliers', targetRegNo: '' })
+    setNewsForm(emptyNewsForm())
+    setNotifForm(emptyNotifForm())
     setActive(true)
   }
 
@@ -220,12 +270,17 @@ export default function Communication() {
       return
     }
 
+    if (newsForm.audienceType === 'Route' && !newsForm.targetRoute.trim()) {
+      showToast('Route is required for route-wise news.', 'error')
+      return
+    }
+
     setSaving(true)
 
     try {
       await communicationsApi.createNews({ ...newsForm, active })
       await reloadCommunications()
-      setNewsForm({ title: '', description: '', expiryDate: '', audienceType: 'AllSuppliers', targetRegNo: '' })
+      setNewsForm(emptyNewsForm())
       setActive(true)
       showToast(active ? 'News published successfully.' : 'News saved as draft.')
     } catch (error) {
@@ -248,6 +303,7 @@ export default function Communication() {
       expiryDate: news.expiry !== 'No expiry' ? news.expiry : '',
       audienceType: news.audienceType || 'AllSuppliers',
       targetRegNo: news.targetRegNo || '',
+      targetRoute: news.targetRoute || '',
     })
     setActive(news.status === 'active')
   }
@@ -270,6 +326,11 @@ export default function Communication() {
       return
     }
 
+    if (newsForm.audienceType === 'Route' && !newsForm.targetRoute.trim()) {
+      showToast('Route is required for route-wise news.', 'error')
+      return
+    }
+
     setSaving(true)
 
     try {
@@ -285,12 +346,18 @@ export default function Communication() {
     }
   }
 
-  const handleDeleteNews = async (id, status) => {
-    const message = status === 'expired'
+  const handleDeleteNews = async (item) => {
+    if (!isWithinDeleteWindow(item)) {
+      showToast('News can be deleted only within 24 hours after creation.', 'error')
+      return
+    }
+
+    const message = item.status === 'expired'
       ? 'This news is expired. Do you still want to delete it?'
       : 'Are you sure you want to delete this news?'
 
     if (window.confirm(message)) {
+      const { id, status } = item
       const deleteKey = `news-${id}`
       setDeletingKey(deleteKey)
 
@@ -327,12 +394,17 @@ export default function Communication() {
       return
     }
 
+    if (notifForm.audienceType === 'Route' && !notifForm.targetRoute.trim()) {
+      showToast('Route is required for route-wise notifications.', 'error')
+      return
+    }
+
     setSaving(true)
 
     try {
       await communicationsApi.createNotification(notifForm)
       await reloadCommunications()
-      setNotifForm({ title: '', message: '', schedule: '', type: 'General', audienceType: 'AllSuppliers', targetRegNo: '' })
+      setNotifForm(emptyNotifForm())
       showToast(notifForm.schedule ? 'Notification scheduled successfully.' : 'Notification sent successfully.')
     } catch (error) {
       showToast(error.message || 'Unable to send notification.', 'error')
@@ -350,6 +422,7 @@ export default function Communication() {
       type: notif.type || 'General',
       audienceType: notif.audienceType || 'AllSuppliers',
       targetRegNo: notif.targetRegNo || '',
+      targetRoute: notif.targetRoute || '',
     })
   }
 
@@ -363,6 +436,11 @@ export default function Communication() {
 
     if (notifForm.audienceType === 'SpecificSupplier' && !isValidRegNo(notifForm.targetRegNo)) {
       showToast('A valid numeric supplier registration number is required.', 'error')
+      return
+    }
+
+    if (notifForm.audienceType === 'Route' && !notifForm.targetRoute.trim()) {
+      showToast('Route is required for route-wise notifications.', 'error')
       return
     }
 
@@ -381,12 +459,18 @@ export default function Communication() {
     }
   }
 
-  const handleDeleteNotif = async (id, status) => {
-    const message = status === 'failed'
+  const handleDeleteNotif = async (item) => {
+    if (!isWithinDeleteWindow(item)) {
+      showToast('Notifications can be deleted only within 24 hours after creation.', 'error')
+      return
+    }
+
+    const message = item.status === 'failed'
       ? 'This notification failed. Do you still want to delete it?'
       : 'Are you sure you want to delete this notification?'
 
     if (window.confirm(message)) {
+      const { id, status } = item
       const deleteKey = `notification-${id}`
       setDeletingKey(deleteKey)
 
@@ -504,7 +588,7 @@ export default function Communication() {
                         <td className="px-4 py-3">
                           <p className="font-semibold text-slate-800 dark:text-slate-200">{item.title}</p>
                           <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                            {item.audienceType === 'SpecificSupplier' ? `Supplier ${item.targetRegNo || '-'}` : 'All suppliers'}
+                            {getAudienceLabel(item)}
                           </p>
                         </td>
                         <td className="max-w-72 px-4 py-3 text-xs text-slate-500 dark:text-slate-400">
@@ -529,8 +613,9 @@ export default function Communication() {
                             </button>
                             <button
                               type="button"
-                              onClick={() => handleDeleteNews(item.id, item.status)}
-                              disabled={deletingKey === `news-${item.id}`}
+                              onClick={() => handleDeleteNews(item)}
+                              disabled={deletingKey === `news-${item.id}` || !isWithinDeleteWindow(item)}
+                              title={isWithinDeleteWindow(item) ? 'Delete news' : 'Delete allowed only within 24 hours'}
                               className="rounded-lg border border-red-200 p-1.5 text-red-500 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-900/40 dark:hover:bg-red-900/20"
                             >
                               {deletingKey === `news-${item.id}` ? <RefreshCw size={13} className="animate-spin" /> : <Trash2 size={13} />}
@@ -567,7 +652,7 @@ export default function Communication() {
                         <td className="px-4 py-3">
                           <p className="font-semibold text-slate-800 dark:text-slate-200">{item.title}</p>
                           <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                            {item.type || 'General'} / {item.audienceType === 'SpecificSupplier' ? `Supplier ${item.targetRegNo || '-'}` : 'All suppliers'}
+                            {item.type || 'General'} / {getAudienceLabel(item)}
                           </p>
                         </td>
                         <td className="max-w-80 px-4 py-3 text-xs text-slate-500 dark:text-slate-400">
@@ -586,8 +671,9 @@ export default function Communication() {
                             </button>
                             <button
                               type="button"
-                              onClick={() => handleDeleteNotif(item.id, item.status)}
-                              disabled={deletingKey === `notification-${item.id}`}
+                              onClick={() => handleDeleteNotif(item)}
+                              disabled={deletingKey === `notification-${item.id}` || !isWithinDeleteWindow(item)}
+                              title={isWithinDeleteWindow(item) ? 'Delete notification' : 'Delete allowed only within 24 hours'}
                               className="rounded-lg border border-red-200 p-1.5 text-red-500 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-900/40 dark:hover:bg-red-900/20"
                             >
                               {deletingKey === `notification-${item.id}` ? <RefreshCw size={13} className="animate-spin" /> : <Trash2 size={13} />}
@@ -663,7 +749,12 @@ export default function Communication() {
                     <label className="mb-1.5 block text-xs font-semibold uppercase text-slate-500">Audience</label>
                     <Combobox
                       value={newsForm.audienceType}
-                      onChange={value => setNewsForm({ ...newsForm, audienceType: value, targetRegNo: value === 'SpecificSupplier' ? newsForm.targetRegNo : '' })}
+                      onChange={value => setNewsForm({
+                        ...newsForm,
+                        audienceType: value,
+                        targetRegNo: value === 'SpecificSupplier' ? newsForm.targetRegNo : '',
+                        targetRoute: value === 'Route' ? newsForm.targetRoute : '',
+                      })}
                       options={audienceOptions}
                       buttonClassName="py-2.5 dark:bg-slate-900"
                       style={themedInput}
@@ -679,6 +770,20 @@ export default function Communication() {
                         inputMode="numeric"
                         placeholder="Enter supplier registration number"
                         className="w-full rounded-lg border bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition-colors focus:ring-2 dark:bg-slate-900 dark:text-slate-300"
+                        style={themedInput}
+                      />
+                    </div>
+                  )}
+                  {newsForm.audienceType === 'Route' && (
+                    <div>
+                      <label className="mb-1.5 block text-xs font-semibold uppercase text-slate-500">Route</label>
+                      <Combobox
+                        value={newsForm.targetRoute}
+                        onChange={value => setNewsForm({ ...newsForm, targetRoute: value })}
+                        options={routeOptions}
+                        placeholder={routeOptions.length === 0 ? 'No routes available' : 'Select route'}
+                        disabled={routeOptions.length === 0}
+                        buttonClassName="py-2.5 dark:bg-slate-900"
                         style={themedInput}
                       />
                     </div>
@@ -760,7 +865,12 @@ export default function Communication() {
                     <label className="mb-1.5 block text-xs font-semibold uppercase text-slate-500">Audience</label>
                     <Combobox
                       value={notifForm.audienceType}
-                      onChange={value => setNotifForm({ ...notifForm, audienceType: value, targetRegNo: value === 'SpecificSupplier' ? notifForm.targetRegNo : '' })}
+                      onChange={value => setNotifForm({
+                        ...notifForm,
+                        audienceType: value,
+                        targetRegNo: value === 'SpecificSupplier' ? notifForm.targetRegNo : '',
+                        targetRoute: value === 'Route' ? notifForm.targetRoute : '',
+                      })}
                       options={audienceOptions}
                       buttonClassName="py-2.5 dark:bg-slate-900"
                       style={themedInput}
@@ -776,6 +886,20 @@ export default function Communication() {
                         inputMode="numeric"
                         placeholder="Enter supplier registration number"
                         className="w-full rounded-lg border bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition-colors focus:ring-2 dark:bg-slate-900 dark:text-slate-300"
+                        style={themedInput}
+                      />
+                    </div>
+                  )}
+                  {notifForm.audienceType === 'Route' && (
+                    <div>
+                      <label className="mb-1.5 block text-xs font-semibold uppercase text-slate-500">Route</label>
+                      <Combobox
+                        value={notifForm.targetRoute}
+                        onChange={value => setNotifForm({ ...notifForm, targetRoute: value })}
+                        options={routeOptions}
+                        placeholder={routeOptions.length === 0 ? 'No routes available' : 'Select route'}
+                        disabled={routeOptions.length === 0}
+                        buttonClassName="py-2.5 dark:bg-slate-900"
                         style={themedInput}
                       />
                     </div>
