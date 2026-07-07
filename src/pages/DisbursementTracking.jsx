@@ -20,6 +20,8 @@ import { adminAuthStorage } from '../services/adminApiClient'
 import { disbursementApi } from '../services/disbursementApi'
 import { dashboardRequestsApi } from '../services/dashboardRequestsApi'
 import { downloadDocReport, printReportAsPdf } from '../utils/reports'
+import { hasAdminPermission } from '../services/adminPermissions'
+import { dashboardPermissionsApi } from '../services/dashboardPermissionsApi'
 
 const typeStyles = {
   advance: {
@@ -845,6 +847,39 @@ export default function DisbursementTracking() {
   const [selectedGroupKey, setSelectedGroupKey] = useState('')
   const [selectedReceiptRows, setSelectedReceiptRows] = useState([])
   const [selectedDetailsLoading, setSelectedDetailsLoading] = useState(false)
+  const [currentAdmin, setCurrentAdmin] = useState(() => adminAuthStorage.getUser())
+
+  const canUpdateTracking = hasAdminPermission(currentAdmin, ['disbursementTracking.update'])
+  const canExport = hasAdminPermission(currentAdmin, ['disbursementTracking.export'])
+
+  useEffect(() => {
+    const admin = adminAuthStorage.getUser()
+    if (!admin?.id || admin.isSuperAdmin) {
+      return
+    }
+
+    let mounted = true
+    dashboardPermissionsApi
+      .getUserPermissions(admin.id)
+      .then(permissions => {
+        if (!mounted) return
+        const updatedAdmin = {
+          ...admin,
+          hasPermissionData: true,
+          modulePermissions: permissions.modulePermissions || {},
+          subPermissions: permissions.subPermissions || {},
+        }
+        adminAuthStorage.setUser(updatedAdmin)
+        setCurrentAdmin(updatedAdmin)
+      })
+      .catch(() => {
+        if (mounted) setCurrentAdmin(admin)
+      })
+
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -1217,6 +1252,12 @@ export default function DisbursementTracking() {
   const handleSelectedDeliveryNoteReportFormat = (format) => {
     if (!format) return
 
+    if (!canExport) {
+      setShowError('You do not have permission to export disbursement tracking reports.')
+      setTimeout(() => setShowError(null), 3000)
+      return
+    }
+
     if (!selectedNote) {
       setShowError('Please select a borrower delivery note first')
       setTimeout(() => setShowError(null), 3000)
@@ -1242,6 +1283,11 @@ export default function DisbursementTracking() {
 
   const handleTrackingReportFormat = (format) => {
     if (!format) return
+    if (!canExport) {
+      setShowError('You do not have permission to export disbursement tracking reports.')
+      setTimeout(() => setShowError(null), 3000)
+      return
+    }
     if (format === 'doc') {
       downloadDocReport(buildTrackingReport())
       return
@@ -1253,6 +1299,11 @@ export default function DisbursementTracking() {
   }
 
   const downloadReport = (report, format) => {
+    if (!canExport) {
+      setShowError('You do not have permission to export disbursement tracking reports.')
+      setTimeout(() => setShowError(null), 3000)
+      return
+    }
     if (format === 'doc') {
       downloadDocReport(report)
       return
@@ -1313,6 +1364,11 @@ export default function DisbursementTracking() {
 
   const handleDeliveryNoteReportFormat = (format) => {
     if (!format) return
+    if (!canExport) {
+      setShowError('You do not have permission to export disbursement tracking reports.')
+      setTimeout(() => setShowError(null), 3000)
+      return
+    }
     if (format === 'doc') {
       downloadDocReport(buildDeliveryNoteReport())
       return
@@ -1415,6 +1471,12 @@ export default function DisbursementTracking() {
   }
 
   const openPrintHtml = async (deliveryNoteId) => {
+    if (!canExport) {
+      setShowError('You do not have permission to print delivery notes.')
+      setTimeout(() => setShowError(null), 3000)
+      return
+    }
+
     try {
       const html = await disbursementApi.getDeliveryNotePrintHtml(deliveryNoteId)
       const printWindow = window.open('', '_blank')
@@ -1434,6 +1496,12 @@ export default function DisbursementTracking() {
   }
 
   const markReceived = async (row) => {
+    if (!canUpdateTracking) {
+      setShowError('You do not have permission to mark disbursements as received.')
+      setTimeout(() => setShowError(null), 3000)
+      return
+    }
+
     const id = row?.trackingId
 
     if (!id) {
@@ -1744,7 +1812,7 @@ export default function DisbursementTracking() {
                 ) : advanceReceiptRows.map(row => {
                   const receiptStatus = getReceiptStatus(row.status)
                   const canMarkReceived = receiptStatus !== 'completed'
-                  const actionDisabled = normalizeId(receivingId) === normalizeId(row.trackingId) || !row.trackingId
+                  const actionDisabled = normalizeId(receivingId) === normalizeId(row.trackingId) || !row.trackingId || !canUpdateTracking
 
                   return (
                     <tr key={`advance-receipt-${row.trackingId}`} className="border-b border-slate-100 transition-colors hover:bg-slate-50 dark:border-slate-700/50 dark:hover:bg-slate-700/30">
@@ -1822,7 +1890,8 @@ export default function DisbursementTracking() {
                   <button
                     type="button"
                     onClick={() => openPrintHtml(selectedNote.noteIds[0])}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+                    disabled={!canExport}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
                   >
                     <Printer size={12} /> Print Selected DN
                   </button>
@@ -1996,7 +2065,7 @@ export default function DisbursementTracking() {
               ) : selectedReceiptRows.map(row => {
                 const receiptStatus = getReceiptStatus(row.status)
                 const canMarkReceived = receiptStatus !== 'completed'
-                const actionDisabled = normalizeId(receivingId) === normalizeId(row.trackingId) || !row.trackingId
+                const actionDisabled = normalizeId(receivingId) === normalizeId(row.trackingId) || !row.trackingId || !canUpdateTracking
 
                 return (
                   <tr key={getReceiptRowKey(row)} className="border-b border-slate-100 transition-colors hover:bg-slate-50 dark:border-slate-700/50 dark:hover:bg-slate-700/30">

@@ -41,30 +41,6 @@ const normalizePermissions = (row = {}) => ({
   subPermissions: getValue(row, 'subPermissions') || {},
 })
 
-const ensureStatusOverridePermission = (modules) => (
-  modules.map(module => {
-    if (module.id !== 'requests') return module
-
-    const hasOverride = module.subPermissions.some(sub => (
-      sub.id === 'status_override' || sub.id === 'requests.status_override'
-    ))
-
-    if (hasOverride) return module
-
-    return {
-      ...module,
-      subPermissions: [
-        ...module.subPermissions,
-        {
-          id: 'requests.status_override',
-          label: 'Override approved/rejected status',
-          description: 'Allow approved requests to be rejected and rejected requests to be approved.',
-        },
-      ],
-    }
-  })
-)
-
 const normalizeSettings = (response = {}) => {
   const rawUserPermissions = getValue(response, 'userPermissions') || {}
   const userPermissions = Object.entries(rawUserPermissions).reduce((acc, [userId, permissions]) => {
@@ -74,19 +50,15 @@ const normalizeSettings = (response = {}) => {
 
   return {
     users: (getValue(response, 'users') || []).map(normalizeUser),
-    modules: ensureStatusOverridePermission((getValue(response, 'modules') || []).map(normalizeModule)),
+    modules: (getValue(response, 'modules') || []).map(normalizeModule),
     userPermissions,
   }
 }
 
-const buildMockModules = () => ensureStatusOverridePermission(
+const buildMockModules = () => (
   Object.entries(permissionCatalog).map(([id, subPermissions]) => ({
-    id: id === 'settings' ? 'permissions' : id,
-    label: id === 'userManagement'
-      ? 'User Management'
-      : id === 'settings'
-        ? 'Permissions'
-        : id.replace(/([A-Z])/g, ' $1').replace(/^./, char => char.toUpperCase()),
+    id,
+    label: id.replace(/([A-Z])/g, ' $1').replace(/^./, char => char.toUpperCase()),
     description: '',
     subPermissions,
   }))

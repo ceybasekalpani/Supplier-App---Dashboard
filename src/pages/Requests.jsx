@@ -42,24 +42,24 @@ const validFilters = ['all', 'pending', 'approved', 'rejected']
 
 const requestActionPermissions = {
   approve: {
-    advance: ['requests.approve', 'advance_requests.approve', 'advance.approve', 'approve_requests', 'approve_advance_requests', 'approve'],
-    fertilizer: ['requests.approve', 'fertilizer_requests.approve', 'fertilizer.approve', 'approve_requests', 'approve_fertilizer_requests', 'approve'],
-    items: ['requests.approve', 'item_requests.approve', 'items.approve', 'item.approve', 'approve_requests', 'approve_item_requests', 'approve'],
+    advance: ['cashRequests.approve'],
+    fertilizer: ['fertilizerRequests.approve'],
+    items: ['itemRequests.approve'],
   },
   reject: {
-    advance: ['requests.reject', 'advance_requests.reject', 'advance.reject', 'reject_requests', 'reject_advance_requests', 'reject'],
-    fertilizer: ['requests.reject', 'fertilizer_requests.reject', 'fertilizer.reject', 'reject_requests', 'reject_fertilizer_requests', 'reject'],
-    items: ['requests.reject', 'item_requests.reject', 'items.reject', 'item.reject', 'reject_requests', 'reject_item_requests', 'reject'],
+    advance: ['cashRequests.approve'],
+    fertilizer: ['fertilizerRequests.approve'],
+    items: ['itemRequests.approve'],
   },
   approveRejected: {
-    advance: ['requests.status_override', 'status_override'],
-    fertilizer: ['requests.status_override', 'status_override'],
-    items: ['requests.status_override', 'status_override'],
+    advance: ['cashRequests.approve'],
+    fertilizer: ['fertilizerRequests.approve'],
+    items: ['itemRequests.approve'],
   },
   rejectApproved: {
-    advance: ['requests.status_override', 'status_override'],
-    fertilizer: ['requests.status_override', 'status_override'],
-    items: ['requests.status_override', 'status_override'],
+    advance: ['cashRequests.approve'],
+    fertilizer: ['fertilizerRequests.approve'],
+    items: ['itemRequests.approve'],
   },
 }
 
@@ -873,7 +873,6 @@ export default function Requests() {
   useEffect(() => {
     const admin = adminAuthStorage.getUser()
     if (!admin?.id || admin.isSuperAdmin) {
-      setCurrentAdmin(admin)
       return
     }
 

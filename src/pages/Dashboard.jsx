@@ -7,6 +7,9 @@ import RecentActivityTable from '../components/dashboard/RecentActivityTable'
 import PageHeader from '../components/ui/PageHeader'
 import { getDashboardMetrics } from '../data/dashboardMetrics'
 import { dashboardMetricsApi } from '../services/dashboardMetricsApi'
+import { adminAuthStorage } from '../services/adminApiClient'
+import { hasAdminPermission } from '../services/adminPermissions'
+import { dashboardPermissionsApi } from '../services/dashboardPermissionsApi'
 
 export default function Dashboard() {
   const [dashboard, setDashboard] = useState(() => ({
@@ -17,6 +20,38 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [refreshKey, setRefreshKey] = useState(0)
+  const [currentAdmin, setCurrentAdmin] = useState(() => adminAuthStorage.getUser())
+
+  const canQuickActions = hasAdminPermission(currentAdmin, ['dashboard.quickActions'])
+
+  useEffect(() => {
+    const admin = adminAuthStorage.getUser()
+    if (!admin?.id || admin.isSuperAdmin) {
+      return
+    }
+
+    let mounted = true
+    dashboardPermissionsApi
+      .getUserPermissions(admin.id)
+      .then(permissions => {
+        if (!mounted) return
+        const updatedAdmin = {
+          ...admin,
+          hasPermissionData: true,
+          modulePermissions: permissions.modulePermissions || {},
+          subPermissions: permissions.subPermissions || {},
+        }
+        adminAuthStorage.setUser(updatedAdmin)
+        setCurrentAdmin(updatedAdmin)
+      })
+      .catch(() => {
+        if (mounted) setCurrentAdmin(admin)
+      })
+
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -86,9 +121,9 @@ export default function Dashboard() {
 
       <DashboardStats stats={(dashboard.requestQueue?.length ? dashboard.requestQueue : dashboard.stats) || []} />
 
-      <div className="grid min-w-0 grid-cols-1 xl:grid-cols-[1.5fr_1fr] gap-5">
+      <div className={`grid min-w-0 grid-cols-1 gap-5 ${canQuickActions ? 'xl:grid-cols-[1.5fr_1fr]' : ''}`}>
         <MonthlyRequestChart data={dashboard.monthlyRequestVolume || []} />
-        <QuickActionsPanel queue={dashboard.requestQueue || []} />
+        {canQuickActions && <QuickActionsPanel queue={dashboard.requestQueue || []} />}
       </div>
 
       <RecentActivityTable activities={dashboard.recentActivities || []} />

@@ -21,6 +21,9 @@ import Toggle from '../components/ui/Toggle'
 import { communicationsApi } from '../services/communicationsApi'
 import { supplierDashboardApi } from '../services/supplierDashboardApi'
 import Combobox from '../components/ui/Combobox'
+import { adminAuthStorage } from '../services/adminApiClient'
+import { hasAdminPermission } from '../services/adminPermissions'
+import { dashboardPermissionsApi } from '../services/dashboardPermissionsApi'
 
 const tabs = [
   { id: 'news', label: 'News', icon: Newspaper },
@@ -166,16 +169,53 @@ export default function Communication() {
   const [refreshKey, setRefreshKey] = useState(0)
   const [toast, setToast] = useState(null)
   const [routeOptions, setRouteOptions] = useState([])
+  const [currentAdmin, setCurrentAdmin] = useState(() => adminAuthStorage.getUser())
 
   const filteredNews = newsItems.filter(item => newsFilter === 'all' || item.status === newsFilter)
   const filteredNotifications = notifications.filter(item => notifFilter === 'all' || item.status === notifFilter)
   const activeTab = tabs.find(item => item.id === tab)
   const ActiveTabIcon = activeTab.icon
 
+  const canCreateNews = hasAdminPermission(currentAdmin, ['news.create'])
+  const canUpdateNews = hasAdminPermission(currentAdmin, ['news.update'])
+  const canDeleteNews = hasAdminPermission(currentAdmin, ['news.delete'])
+  const canCreateNotif = hasAdminPermission(currentAdmin, ['notifications.create'])
+  const canUpdateNotif = hasAdminPermission(currentAdmin, ['notifications.update'])
+  const canDeleteNotif = hasAdminPermission(currentAdmin, ['notifications.delete'])
+
   const showToast = (message, type = 'success') => {
     setToast({ message, type })
     setTimeout(() => setToast(null), 3000)
   }
+
+  useEffect(() => {
+    const admin = adminAuthStorage.getUser()
+    if (!admin?.id || admin.isSuperAdmin) {
+      return
+    }
+
+    let mounted = true
+    dashboardPermissionsApi
+      .getUserPermissions(admin.id)
+      .then(permissions => {
+        if (!mounted) return
+        const updatedAdmin = {
+          ...admin,
+          hasPermissionData: true,
+          modulePermissions: permissions.modulePermissions || {},
+          subPermissions: permissions.subPermissions || {},
+        }
+        adminAuthStorage.setUser(updatedAdmin)
+        setCurrentAdmin(updatedAdmin)
+      })
+      .catch(() => {
+        if (mounted) setCurrentAdmin(admin)
+      })
+
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -255,6 +295,11 @@ export default function Communication() {
   const handleCreateNews = async () => {
     if (saving) return
 
+    if (!canCreateNews) {
+      showToast('You do not have permission to create news.', 'error')
+      return
+    }
+
     if (!newsForm.title.trim() || !newsForm.description.trim()) {
       showToast('Please fill in all required fields.', 'error')
       return
@@ -311,6 +356,11 @@ export default function Communication() {
   const handleUpdateNews = async () => {
     if (saving || !editingNews) return
 
+    if (!canUpdateNews) {
+      showToast('You do not have permission to update news.', 'error')
+      return
+    }
+
     if (!newsForm.title.trim() || !newsForm.description.trim()) {
       showToast('Please fill in all required fields.', 'error')
       return
@@ -347,6 +397,11 @@ export default function Communication() {
   }
 
   const handleDeleteNews = async (item) => {
+    if (!canDeleteNews) {
+      showToast('You do not have permission to delete news.', 'error')
+      return
+    }
+
     if (!isWithinDeleteWindow(item)) {
       showToast('News can be deleted only within 24 hours after creation.', 'error')
       return
@@ -375,6 +430,11 @@ export default function Communication() {
 
   const handleSendNotification = async () => {
     if (saving) return
+
+    if (!canCreateNotif) {
+      showToast('You do not have permission to send notifications.', 'error')
+      return
+    }
 
     if (!notifForm.title.trim() || !notifForm.message.trim()) {
       showToast('Please fill in title and message.', 'error')
@@ -429,6 +489,11 @@ export default function Communication() {
   const handleUpdateNotif = async () => {
     if (saving || !editingNotif) return
 
+    if (!canUpdateNotif) {
+      showToast('You do not have permission to update notifications.', 'error')
+      return
+    }
+
     if (!notifForm.title.trim() || !notifForm.message.trim()) {
       showToast('Please fill in title and message.', 'error')
       return
@@ -460,6 +525,11 @@ export default function Communication() {
   }
 
   const handleDeleteNotif = async (item) => {
+    if (!canDeleteNotif) {
+      showToast('You do not have permission to delete notifications.', 'error')
+      return
+    }
+
     if (!isWithinDeleteWindow(item)) {
       showToast('Notifications can be deleted only within 24 hours after creation.', 'error')
       return
@@ -602,8 +672,8 @@ export default function Communication() {
                             <button
                               type="button"
                               onClick={() => handleEditNews(item)}
-                              disabled={item.status === 'expired'}
-                              className={`rounded-lg border p-1.5 transition-colors ${
+                              disabled={item.status === 'expired' || !canUpdateNews}
+                              className={`rounded-lg border p-1.5 transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
                                 item.status === 'expired'
                                   ? 'cursor-not-allowed border-slate-200 text-slate-300 dark:border-slate-700 dark:text-slate-600'
                                   : 'border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700'
@@ -614,7 +684,7 @@ export default function Communication() {
                             <button
                               type="button"
                               onClick={() => handleDeleteNews(item)}
-                              disabled={deletingKey === `news-${item.id}` || !isWithinDeleteWindow(item)}
+                              disabled={deletingKey === `news-${item.id}` || !isWithinDeleteWindow(item) || !canDeleteNews}
                               title={isWithinDeleteWindow(item) ? 'Delete news' : 'Delete allowed only within 24 hours'}
                               className="rounded-lg border border-red-200 p-1.5 text-red-500 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-900/40 dark:hover:bg-red-900/20"
                             >
@@ -665,14 +735,15 @@ export default function Communication() {
                             <button
                               type="button"
                               onClick={() => handleEditNotif(item)}
-                              className="rounded-lg border border-slate-200 p-1.5 text-slate-500 transition-colors hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+                              disabled={!canUpdateNotif}
+                              className="rounded-lg border border-slate-200 p-1.5 text-slate-500 transition-colors hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
                             >
                               <Pencil size={13} />
                             </button>
                             <button
                               type="button"
                               onClick={() => handleDeleteNotif(item)}
-                              disabled={deletingKey === `notification-${item.id}` || !isWithinDeleteWindow(item)}
+                              disabled={deletingKey === `notification-${item.id}` || !isWithinDeleteWindow(item) || !canDeleteNotif}
                               title={isWithinDeleteWindow(item) ? 'Delete notification' : 'Delete allowed only within 24 hours'}
                               className="rounded-lg border border-red-200 p-1.5 text-red-500 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-900/40 dark:hover:bg-red-900/20"
                             >
@@ -804,7 +875,7 @@ export default function Communication() {
                     <button
                       type="button"
                       onClick={editingNews ? handleUpdateNews : handleCreateNews}
-                      disabled={saving}
+                      disabled={saving || (editingNews ? !canUpdateNews : !canCreateNews)}
                       className="flex-1 rounded-lg py-2.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-70"
                       style={themedPrimary}
                     >
@@ -933,7 +1004,7 @@ export default function Communication() {
                     <button
                       type="button"
                       onClick={editingNotif ? handleUpdateNotif : handleSendNotification}
-                      disabled={saving}
+                      disabled={saving || (editingNotif ? !canUpdateNotif : !canCreateNotif)}
                       className="flex-1 rounded-lg py-2.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-70"
                       style={themedPrimary}
                     >

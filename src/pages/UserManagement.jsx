@@ -10,6 +10,8 @@ import { sanitizeText, validateUserForm } from '../utils/validation';
 import { useAuthenticatedImageSrc } from '../utils/useAuthenticatedImageSrc';
 import { dashboardUsersApi } from '../services/dashboardUsersApi';
 import { adminAuthStorage } from '../services/adminApiClient';
+import { hasAdminPermission } from '../services/adminPermissions';
+import { dashboardPermissionsApi } from '../services/dashboardPermissionsApi';
 
 const UserManagement = () => {
   const [users, setUsers] = useState([]);
@@ -31,12 +33,47 @@ const UserManagement = () => {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [toast, setToast] = useState(null);
+  const [currentAdmin, setCurrentAdmin] = useState(() => adminAuthStorage.getUser());
   const fileInputRef = useRef(null);
+
+  const canCreateUser = hasAdminPermission(currentAdmin, ['userManagement.create']);
+  const canUpdateUser = hasAdminPermission(currentAdmin, ['userManagement.update']);
+  const canDeleteUser = hasAdminPermission(currentAdmin, ['userManagement.delete']);
+  const canAssignPermissions = hasAdminPermission(currentAdmin, ['permissionManagement.assign']);
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
   };
+
+  useEffect(() => {
+    const admin = adminAuthStorage.getUser();
+    if (!admin?.id || admin.isSuperAdmin) {
+      return;
+    }
+
+    let mounted = true;
+    dashboardPermissionsApi
+      .getUserPermissions(admin.id)
+      .then(permissions => {
+        if (!mounted) return;
+        const updatedAdmin = {
+          ...admin,
+          hasPermissionData: true,
+          modulePermissions: permissions.modulePermissions || {},
+          subPermissions: permissions.subPermissions || {},
+        };
+        adminAuthStorage.setUser(updatedAdmin);
+        setCurrentAdmin(updatedAdmin);
+      })
+      .catch(() => {
+        if (mounted) setCurrentAdmin(admin);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -188,6 +225,10 @@ const UserManagement = () => {
 
   const handleSave = async () => {
     if (saving) return;
+    if (editingUser ? !canUpdateUser : !canCreateUser) {
+      showToast(`You do not have permission to ${editingUser ? 'update' : 'create'} dashboard users.`, 'error');
+      return;
+    }
     if (!validateForm()) return;
 
     setSaving(true);
@@ -263,6 +304,11 @@ const UserManagement = () => {
 
   const handleDelete = async () => {
     if (!showDeleteConfirm || deleting) return;
+    if (!canDeleteUser) {
+      showToast('You do not have permission to delete dashboard users.', 'error');
+      setShowDeleteConfirm(null);
+      return;
+    }
 
     setDeleting(true);
 
@@ -385,11 +431,13 @@ const UserManagement = () => {
                       <td className="py-3 px-4"><StatusBadge status={user.status} /></td>
                       <td className="py-3 px-4 text-right">
                         <div className="flex justify-end gap-2">
-                          <button onClick={() => handleEdit(user)} className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"><Pencil size={14} /></button>
-                          <Link to={`/settings?userId=${user.id}`} className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors" title="Manage permissions">
-                            <ShieldCheck size={14} />
-                          </Link>
-                          <button onClick={() => setShowDeleteConfirm(user.id)} className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-colors"><Trash2 size={14} /></button>
+                          <button onClick={() => handleEdit(user)} disabled={!canUpdateUser} className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors disabled:cursor-not-allowed disabled:opacity-40"><Pencil size={14} /></button>
+                          {canAssignPermissions && (
+                            <Link to={`/settings?userId=${user.id}`} className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors" title="Manage permissions">
+                              <ShieldCheck size={14} />
+                            </Link>
+                          )}
+                          <button onClick={() => setShowDeleteConfirm(user.id)} disabled={!canDeleteUser} className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-colors disabled:cursor-not-allowed disabled:opacity-40"><Trash2 size={14} /></button>
                         </div>
                       </td>
                     </tr>
@@ -495,7 +543,7 @@ const UserManagement = () => {
             {/* Buttons */}
             <div className="flex gap-3 pt-2">
               <button onClick={resetForm} className="flex-1 py-2 text-sm font-medium rounded-lg border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">{editingUser ? 'Cancel' : 'Discard'}</button>
-              <button onClick={handleSave} disabled={saving} className="flex-1 py-2 text-sm font-medium rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors shadow-sm disabled:cursor-not-allowed disabled:opacity-70">
+              <button onClick={handleSave} disabled={saving || (editingUser ? !canUpdateUser : !canCreateUser)} className="flex-1 py-2 text-sm font-medium rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors shadow-sm disabled:cursor-not-allowed disabled:opacity-70">
                 <span className="inline-flex items-center justify-center gap-2">
                   {saving && <RefreshCw size={14} className="animate-spin" />}
                   {editingUser ? 'Update User' : 'Create User'}

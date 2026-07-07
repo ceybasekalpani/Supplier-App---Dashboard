@@ -3,6 +3,14 @@ import { Check, Flower2, Info, Package, Pencil, Plus, RefreshCw, Save, X } from 
 import PageHeader from '../components/ui/PageHeader'
 import StatusBadge from '../components/ui/StatusBadge'
 import { fertilizerItemConfigurationsApi } from '../services/fertilizerItemConfigurationsApi'
+import { adminAuthStorage } from '../services/adminApiClient'
+import { hasAdminPermission } from '../services/adminPermissions'
+import { dashboardPermissionsApi } from '../services/dashboardPermissionsApi'
+
+const configModules = {
+  fertilizer: 'fertilizerConfiguration',
+  items: 'itemConfiguration',
+}
 
 const configMeta = {
   fertilizer: {
@@ -51,10 +59,43 @@ export default function Configurations() {
 
   const [fertilizerList, setFertilizerList] = useState([])
   const [itemList, setItemList] = useState([])
+  const [currentAdmin, setCurrentAdmin] = useState(() => adminAuthStorage.getUser())
 
   const meta = configMeta[tab]
   const TypeIcon = meta.icon
   const items = tab === 'fertilizer' ? fertilizerList : itemList
+  const configModule = configModules[tab]
+  const canCreate = hasAdminPermission(currentAdmin, [`${configModule}.create`])
+  const canUpdate = hasAdminPermission(currentAdmin, [`${configModule}.update`])
+
+  useEffect(() => {
+    const admin = adminAuthStorage.getUser()
+    if (!admin?.id || admin.isSuperAdmin) {
+      return
+    }
+
+    let mounted = true
+    dashboardPermissionsApi
+      .getUserPermissions(admin.id)
+      .then(permissions => {
+        if (!mounted) return
+        const updatedAdmin = {
+          ...admin,
+          hasPermissionData: true,
+          modulePermissions: permissions.modulePermissions || {},
+          subPermissions: permissions.subPermissions || {},
+        }
+        adminAuthStorage.setUser(updatedAdmin)
+        setCurrentAdmin(updatedAdmin)
+      })
+      .catch(() => {
+        if (mounted) setCurrentAdmin(admin)
+      })
+
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -114,6 +155,11 @@ export default function Configurations() {
   const handleSave = async () => {
     if (saving) return
 
+    if (editingId ? !canUpdate : !canCreate) {
+      setError(`You do not have permission to ${editingId ? 'update' : 'create'} ${meta.label.toLowerCase()} names.`)
+      return
+    }
+
     const cleanName = name.trim()
 
     if (!cleanName) {
@@ -165,6 +211,11 @@ export default function Configurations() {
 
   const handleActiveChange = async (item) => {
     if (activeSavingId) return
+
+    if (!canUpdate) {
+      setLoadError(`You do not have permission to update ${meta.label.toLowerCase()} names.`)
+      return
+    }
 
     setActiveSavingId(item.id)
     setLoadError('')
@@ -335,7 +386,7 @@ export default function Configurations() {
                             <button
                               type="button"
                               onClick={() => handleActiveChange(item)}
-                              disabled={activeSavingId === item.id}
+                              disabled={activeSavingId === item.id || !canUpdate}
                               className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
                                 item.isActive
                                   ? 'border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700'
@@ -348,7 +399,8 @@ export default function Configurations() {
                             <button
                               type="button"
                               onClick={() => handleEdit(item)}
-                              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+                              disabled={!canUpdate}
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
                             >
                               <Pencil size={13} />
                               Edit
@@ -412,7 +464,7 @@ export default function Configurations() {
                   <button
                     type="button"
                     onClick={handleSave}
-                    disabled={saving}
+                    disabled={saving || (editingId ? !canUpdate : !canCreate)}
                     className="flex-1 py-2.5 text-sm font-semibold rounded-lg shadow-sm transition-colors focus:ring-2 disabled:cursor-not-allowed disabled:opacity-70"
                     style={{
                       ...themedAccent.button,

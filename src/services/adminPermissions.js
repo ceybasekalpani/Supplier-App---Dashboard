@@ -1,13 +1,13 @@
 export const PERMISSIONS = {
-  dashboard: ['dashboard.view', 'dashboard'],
-  suppliers: ['suppliers.view', 'suppliers'],
-  requests: ['requests.view', 'advance_requests.view', 'fertilizer_requests.view', 'item_requests.view', 'requests'],
-  disbursements: ['disbursements.view', 'disbursements.manage', 'disbursements'],
-  disbursementTracking: ['disbursements.view', 'disbursements.manage', 'disbursementTracking'],
-  configurations: ['fertilizer.manage', 'items.manage', 'configurations'],
-  communication: ['news.view', 'news.manage', 'notifications.view', 'notifications.send', 'communication'],
-  userManagement: ['users.view', 'users.manage', 'userManagement'],
-  permissions: ['permissions.view', 'permissions.assign', 'permissions.manage', 'settings'],
+  dashboard: ['dashboard.view'],
+  suppliers: ['suppliers.view'],
+  requests: ['cashRequests.view', 'fertilizerRequests.view', 'itemRequests.view'],
+  disbursements: ['disbursements.view'],
+  disbursementTracking: ['disbursementTracking.view'],
+  configurations: ['fertilizerConfiguration.view', 'itemConfiguration.view'],
+  communication: ['news.view', 'notifications.view'],
+  userManagement: ['userManagement.view'],
+  permissions: ['permissionManagement.view', 'permissionManagement.assign'],
 }
 
 const toArray = value => Array.isArray(value) ? value : []

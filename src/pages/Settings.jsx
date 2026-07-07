@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { 
-  Save, RotateCcw, Users, ShieldCheck, Key, LayoutDashboard, 
-  Truck, FileText, Settings as SettingsIcon, MessageSquare, 
-  UserCog, Sliders, Check, ChevronRight, ChevronDown,
+import {
+  Save, RotateCcw, Users, ShieldCheck, Key, LayoutDashboard,
+  Banknote, Sprout, Package, Send, CheckCircle, Flower2, ShoppingBag,
+  Newspaper, Bell, UserCog, Lock, Check, ChevronRight, ChevronDown,
   CheckSquare, Square, RefreshCw
 } from 'lucide-react';
 import Avatar from '../components/ui/Avatar';
@@ -12,12 +12,18 @@ import { dashboardPermissionsApi } from '../services/dashboardPermissionsApi';
 
 const moduleIconMap = {
   dashboard: LayoutDashboard,
-  suppliers: Truck,
-  requests: FileText,
-  configurations: SettingsIcon,
-  communication: MessageSquare,
+  suppliers: Users,
+  cashRequests: Banknote,
+  fertilizerRequests: Sprout,
+  itemRequests: Package,
+  disbursements: Send,
+  disbursementTracking: CheckCircle,
+  fertilizerConfiguration: Flower2,
+  itemConfiguration: ShoppingBag,
+  news: Newspaper,
+  notifications: Bell,
   userManagement: UserCog,
-  settings: Sliders,
+  permissionManagement: Lock,
 }
 
 const emptyPermissions = { modulePermissions: {}, subPermissions: {} }
@@ -104,7 +110,7 @@ const Settings = () => {
     } else {
       // If enabling module, enable default sub-permissions (view only for basic access)
       const defaultSubs = (subPermissionsByModule[moduleId] || [])
-        .filter(sub => sub.id.startsWith('view_'))
+        .filter(sub => sub.id.endsWith('.view'))
         .map(sub => sub.id);
       setSubPermissions(prev => ({ ...prev, [moduleId]: defaultSubs }));
     }

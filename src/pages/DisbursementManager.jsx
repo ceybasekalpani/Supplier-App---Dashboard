@@ -18,6 +18,9 @@ import Combobox from '../components/ui/Combobox'
 import StatusBadge from '../components/ui/StatusBadge'
 import { disbursementApi } from '../services/disbursementApi'
 import { downloadDocReport, printReportAsPdf } from '../utils/reports'
+import { adminAuthStorage } from '../services/adminApiClient'
+import { hasAdminPermission } from '../services/adminPermissions'
+import { dashboardPermissionsApi } from '../services/dashboardPermissionsApi'
 
 const typeConfig = {
   advance: { label: 'Advance', icon: Banknote, tone: 'amber' },
@@ -125,6 +128,7 @@ function SelectedReviewModal({
   borrower,
   eligibleRows,
   generating,
+  canGenerate,
   onBorrowerChange,
   onClose,
   onGenerate,
@@ -267,7 +271,7 @@ function SelectedReviewModal({
           <button
             type="button"
             onClick={onGenerate}
-            disabled={generating || eligibleRows.length === 0}
+            disabled={generating || eligibleRows.length === 0 || !canGenerate}
             className="inline-flex items-center gap-2 rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-70"
           >
             {generating ? <RefreshCw size={15} className="animate-spin" /> : <Send size={15} />}
@@ -285,6 +289,7 @@ function DisbursementTable({
   selectedRows,
   paymentMethods,
   issuingKey,
+  canDispatch,
   onSelect,
   onSelectAll,
   onPaymentMethod,
@@ -406,7 +411,7 @@ function DisbursementTable({
                           <button
                             type="button"
                             onClick={() => onIssueTransfer(row)}
-                            disabled={issuingKey === key}
+                            disabled={issuingKey === key || !canDispatch}
                             className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-70"
                           >
                             {issuingKey === key ? <RefreshCw size={12} className="animate-spin" /> : <Send size={12} />}
@@ -460,6 +465,39 @@ export default function DisbursementManager() {
   const [fertilizersState, setFertilizersState] = useState([])
   const [itemsState, setItemsState] = useState([])
   const [routeNames, setRouteNames] = useState([])
+  const [currentAdmin, setCurrentAdmin] = useState(() => adminAuthStorage.getUser())
+
+  const canDispatch = hasAdminPermission(currentAdmin, ['disbursements.create'])
+  const canExport = hasAdminPermission(currentAdmin, ['disbursements.export'])
+
+  useEffect(() => {
+    const admin = adminAuthStorage.getUser()
+    if (!admin?.id || admin.isSuperAdmin) {
+      return
+    }
+
+    let mounted = true
+    dashboardPermissionsApi
+      .getUserPermissions(admin.id)
+      .then(permissions => {
+        if (!mounted) return
+        const updatedAdmin = {
+          ...admin,
+          hasPermissionData: true,
+          modulePermissions: permissions.modulePermissions || {},
+          subPermissions: permissions.subPermissions || {},
+        }
+        adminAuthStorage.setUser(updatedAdmin)
+        setCurrentAdmin(updatedAdmin)
+      })
+      .catch(() => {
+        if (mounted) setCurrentAdmin(admin)
+      })
+
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -568,6 +606,12 @@ export default function DisbursementManager() {
   }
 
   const issueBankTransfer = async (row) => {
+    if (!canDispatch) {
+      setShowError('You do not have permission to dispatch disbursements.')
+      setTimeout(() => setShowError(null), 3000)
+      return
+    }
+
     const key = rowKey('advance', row.id)
     const method = getAdvanceMethod(row, paymentMethods) || 'Bank Transfer'
     setIssuingKey(key)
@@ -626,6 +670,12 @@ export default function DisbursementManager() {
   }
 
   const generateDeliveryNote = async () => {
+    if (!canDispatch) {
+      setShowError('You do not have permission to generate delivery notes.')
+      setTimeout(() => setShowError(null), 3000)
+      return
+    }
+
     if (!borrower.borrowerName.trim() || !borrower.borrowerRole.trim()) {
       setShowError('Borrower name and role are required')
       setTimeout(() => setShowError(null), 3000)
@@ -754,6 +804,11 @@ export default function DisbursementManager() {
 
   const handleQueueReportFormat = (format) => {
     if (!format) return
+    if (!canExport) {
+      setShowError('You do not have permission to export disbursement reports.')
+      setTimeout(() => setShowError(null), 3000)
+      return
+    }
     if (format === 'doc') {
       downloadDocReport(buildQueueReport())
       return
@@ -823,7 +878,7 @@ export default function DisbursementManager() {
           <Combobox
             value=""
             onChange={handleQueueReportFormat}
-            disabled={currentRows.length === 0}
+            disabled={currentRows.length === 0 || !canExport}
             placeholder="Download Report"
             options={[
               { value: 'pdf', label: 'PDF' },
@@ -840,7 +895,7 @@ export default function DisbursementManager() {
               }
               setShowReview(true)
             }}
-            disabled={eligibleSelectedRows.length === 0}
+            disabled={eligibleSelectedRows.length === 0 || !canDispatch}
             className="inline-flex items-center gap-2 rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Send size={16} />
@@ -996,6 +1051,7 @@ export default function DisbursementManager() {
         selectedRows={selectedRows}
         paymentMethods={paymentMethods}
         issuingKey={issuingKey}
+        canDispatch={canDispatch}
         onSelect={selectRow}
         onSelectAll={selectAllRows}
         onPaymentMethod={updatePaymentMethod}
@@ -1011,6 +1067,7 @@ export default function DisbursementManager() {
           borrower={borrower}
           eligibleRows={eligibleSelectedRows}
           generating={generating}
+          canGenerate={canDispatch}
           onBorrowerChange={(field, value) => setBorrower(prev => ({ ...prev, [field]: value }))}
           onClose={() => setShowReview(false)}
           onGenerate={generateDeliveryNote}

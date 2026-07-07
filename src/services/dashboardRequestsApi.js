@@ -1,9 +1,7 @@
 import { env } from '../config/env'
 import { advanceRequests, fertilizerRequests, itemRequests } from '../data/mockData'
-import { adminApiRequest, adminAuthStorage } from './adminApiClient'
+import { adminApiRequest } from './adminApiClient'
 import { shouldUseApi } from './apiClient'
-
-const API_BASE_URL = env.apiBaseUrl || env.API_BASE_URL || ''
 
 const getValue = (source, camelKey, pascalKey = camelKey[0].toUpperCase() + camelKey.slice(1)) => (
   source?.[camelKey] ?? source?.[pascalKey]
@@ -177,42 +175,4 @@ export const dashboardRequestsApi = {
     )
   },
 
-  async exportReport({ format = 'pdf', status = '', search = '', fromDate = '', toDate = '' } = {}) {
-    const params = new URLSearchParams()
-    params.set('format', format || 'pdf')
-    if (status && status !== 'all') params.set('status', status)
-    if (search.trim()) params.set('search', search.trim())
-    if (fromDate) params.set('fromDate', fromDate)
-    if (toDate) params.set('toDate', toDate)
-
-    const headers = {}
-    const token = adminAuthStorage.getToken()
-    if (token) headers.Authorization = `Bearer ${token}`
-
-    const response = await fetch(`${API_BASE_URL}/api/DashboardRequests/export?${params.toString()}`, {
-      method: 'GET',
-      headers,
-    })
-
-    if (!response.ok) {
-      const errorBody = await response.json().catch(() => null)
-      throw new Error(errorBody?.message || response.statusText || 'Unable to export request report')
-    }
-
-    const blob = await response.blob()
-    const disposition = response.headers.get('content-disposition') || ''
-    const filenameMatch = disposition.match(/filename\*?=(?:UTF-8''|")?([^";]+)/i)
-    const filename = filenameMatch
-      ? decodeURIComponent(filenameMatch[1].replace(/"/g, ''))
-      : `dashboard-requests-report.${format === 'doc' ? 'doc' : 'pdf'}`
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement('a')
-
-    anchor.href = url
-    anchor.download = filename
-    document.body.appendChild(anchor)
-    anchor.click()
-    document.body.removeChild(anchor)
-    URL.revokeObjectURL(url)
-  },
 }
