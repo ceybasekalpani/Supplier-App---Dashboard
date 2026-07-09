@@ -1,6 +1,15 @@
 export const sanitizeText = (value) => String(value ?? '').trim().replace(/\s+/g, ' ')
 
-export const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value ?? '').trim())
+const EMAIL_PATTERN = /^[a-zA-Z0-9](?:[a-zA-Z0-9._%+-]*[a-zA-Z0-9])?@[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?)*\.[a-zA-Z]{2,24}$/
+
+export const isValidEmail = (value) => {
+  const email = String(value ?? '').trim()
+
+  return Boolean(email)
+    && email.length <= 254
+    && !email.includes('..')
+    && EMAIL_PATTERN.test(email)
+}
 
 export const isValidPhone = (value) => {
   const phone = String(value ?? '').trim()

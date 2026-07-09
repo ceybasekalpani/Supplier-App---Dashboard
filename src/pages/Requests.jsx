@@ -25,11 +25,14 @@ import {
   leafRates,
 } from '../data/mockData'
 import StatusBadge, { getStatusChartColor } from '../components/ui/StatusBadge'
+import Combobox from '../components/ui/Combobox'
 import { dashboardRequestsApi } from '../services/dashboardRequestsApi'
 import { supplierDashboardApi } from '../services/supplierDashboardApi'
+import { factorySettingsApi } from '../services/factorySettingsApi'
 import { adminAuthStorage } from '../services/adminApiClient'
 import { hasAdminPermission, hasExplicitAdminPermission } from '../services/adminPermissions'
 import { dashboardPermissionsApi } from '../services/dashboardPermissionsApi'
+import { downloadDocReport, printReportAsPdf } from '../utils/reports'
 
 const tabs = [
   { id: 'advance', label: 'Advance Requests', icon: Banknote },
@@ -280,6 +283,67 @@ function summarizeQuantityByType(rows) {
   }, {})
 
   return Object.values(totals)
+}
+
+const requestReportLabels = {
+  advance: 'Advance Requests',
+  fertilizer: 'Fertilizer Requests',
+  items: 'Item Requests',
+}
+
+function buildRequestsReport(rows, tab, { filter, fromDate, toDate, search }) {
+  const label = requestReportLabels[tab] || 'Requests'
+  const isAdvance = tab === 'advance'
+  const approvedCount = rows.filter(row => row.status === 'approved').length
+  const pendingCount = rows.filter(row => row.status === 'pending').length
+  const rejectedCount = rows.filter(row => row.status === 'rejected').length
+  const supplierCount = new Set(rows.map(row => row.regNo)).size
+  const totalAmount = isAdvance
+    ? rows.reduce((sum, row) => sum + Number(row.amount || 0), 0)
+    : 0
+  const quantityBreakdown = isAdvance ? [] : summarizeQuantityByType(rows)
+  const totalQuantity = quantityBreakdown.reduce((sum, item) => sum + Number(item.qty || 0), 0)
+
+  return {
+    filename: `${tab}-requests-report`,
+    title: `${label} Report`,
+    subtitle: `Status: ${filter === 'all' ? 'All' : filter} | Date range: ${fromDate || 'Any'} to ${toDate || 'Any'}${search ? ` | Search: ${search}` : ''}`,
+    rows,
+    summary: [],
+    totals: [
+      { label: 'Supplier Count', value: supplierCount },
+      { label: 'Approved Count', value: approvedCount },
+      { label: 'Pending Count', value: pendingCount },
+      { label: 'Rejected Count', value: rejectedCount },
+      { label: isAdvance ? 'Total Advance Amount' : 'Total Quantity', value: isAdvance ? currency(totalAmount) : totalQuantity.toLocaleString() },
+      ...(isAdvance ? [] : quantityBreakdown.map(item => ({
+        label: `Total ${item.type} Quantity`,
+        value: `${item.qty.toLocaleString()} ${item.unit}`.trim(),
+      }))),
+    ],
+    columns: isAdvance
+      ? [
+          { label: 'Request No', value: row => row.requestNo || row.id, width: 0.95 },
+          { label: 'Reg No', value: 'regNo', width: 0.78 },
+          { label: 'Supplier', value: row => row.name || '-', width: 1.6 },
+          { label: 'Amount', value: row => currency(row.amount), width: 1 },
+          { label: 'Date', value: 'date', width: 0.9 },
+          { label: 'Status', value: 'status', width: 0.8 },
+          { label: 'Remarks', value: row => row.remarks || '-', width: 1.4 },
+          { label: 'Checked By', value: row => row.checkedBy || '-', width: 1 },
+        ]
+      : [
+          { label: 'Request No', value: row => row.requestNo || row.id, width: 0.95 },
+          { label: 'Reg No', value: 'regNo', width: 0.78 },
+          { label: 'Supplier', value: row => row.name || '-', width: 1.5 },
+          { label: 'Type', value: row => row.type || '-', width: 1.1 },
+          { label: 'Quantity', value: row => `${Number(row.qty || 0).toLocaleString()} ${row.unit || ''}`.trim(), width: 1 },
+          { label: 'Date', value: 'date', width: 0.9 },
+          { label: 'Status', value: 'status', width: 0.8 },
+          { label: 'Remarks', value: row => row.remarks || '-', width: 1.3 },
+          { label: 'Checked By', value: row => row.checkedBy || '-', width: 1 },
+        ],
+  }
 }
 
 function RequestTableSummary({ rows, tab }) {
@@ -856,6 +920,19 @@ export default function Requests() {
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
   const [salaryDate, setSalaryDate] = useState(() => new Date().toISOString().slice(0, 10))
+
+  useEffect(() => {
+    const controller = new AbortController()
+
+    factorySettingsApi
+      .getSettings({ signal: controller.signal })
+      .then(result => {
+        if (result.salaryDate) setSalaryDate(result.salaryDate)
+      })
+      .catch(() => {})
+
+    return () => controller.abort()
+  }, [])
   const [selectedKey, setSelectedKey] = useState(null)
   const [draft, setDraft] = useState({})
   const [supplierWindow, setSupplierWindow] = useState(null)
@@ -1055,6 +1132,31 @@ export default function Requests() {
     updateSearchParams(tab, normalized)
   }
 
+  function clearAllFilters() {
+    setSearch('')
+    setFromDate('')
+    setToDate('')
+    handleFilterChange('all')
+  }
+
+  function handleRequestReportFormat(format) {
+    if (!format) return
+
+    const report = buildRequestsReport(filtered, tab, {
+      filter,
+      fromDate,
+      toDate,
+      search: debouncedSearch,
+    })
+
+    if (format === 'doc') {
+      downloadDocReport(report)
+      return
+    }
+
+    printReportAsPdf(report)
+  }
+
   function selectRow(row) {
     const rowKey = `${tab}-${row.id}`
     const isSame = selectedKey === rowKey
@@ -1204,26 +1306,37 @@ export default function Requests() {
         </div>
       </div>
 
-      <div className="flex gap-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-1 w-fit shadow-sm">
-        {tabs.map(tabItem => {
-          const Icon = tabItem.icon
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex gap-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-1 w-fit shadow-sm">
+          {tabs.map(tabItem => {
+            const Icon = tabItem.icon
 
-          return (
-            <button
-              key={tabItem.id}
-              type="button"
-              onClick={() => handleTabChange(tabItem.id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold capitalize transition-colors ${
-                tab === tabItem.id
-                  ? tabActiveClass[tabItem.id]
-                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
-              }`}
-            >
-              <Icon size={15} />
-              {tabItem.label}
-            </button>
-          )
-        })}
+            return (
+              <button
+                key={tabItem.id}
+                type="button"
+                onClick={() => handleTabChange(tabItem.id)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold capitalize transition-colors ${
+                  tab === tabItem.id
+                    ? tabActiveClass[tabItem.id]
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                }`}
+              >
+                <Icon size={15} />
+                {tabItem.label}
+              </button>
+            )
+          })}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setRefreshKey(current => current + 1)}
+          className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 shadow-sm transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+        >
+          <RefreshCw size={16} className={requestLoading ? 'animate-spin' : ''} />
+          Refresh
+        </button>
       </div>
 
       {requestError && (
@@ -1264,16 +1377,6 @@ export default function Requests() {
               </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-                Salary date
-                <input
-                  type="date"
-                  value={salaryDate}
-                  onChange={event => setSalaryDate(event.target.value)}
-                  className="bg-transparent text-xs font-bold text-slate-800 outline-none dark:text-white"
-                />
-              </label>
-
                 {validFilters.map(status => (
                   <button
                     key={status}
@@ -1289,14 +1392,28 @@ export default function Requests() {
                   </button>
                 ))}
 
-                <button
-                  type="button"
-                  onClick={() => setRefreshKey(current => current + 1)}
-                  className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
-                >
-                  <RefreshCw size={16} className={requestLoading ? 'animate-spin' : ''} />
-                  Refresh
-                </button>
+                {(search || fromDate || toDate || filter !== 'all') && (
+                  <button
+                    type="button"
+                    onClick={clearAllFilters}
+                    className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
+                  >
+                    Clear Filters
+                  </button>
+                )}
+
+                <Combobox
+                  value=""
+                  onChange={handleRequestReportFormat}
+                  disabled={filtered.length === 0}
+                  placeholder="Download Report"
+                  options={[
+                    { value: 'pdf', label: 'PDF' },
+                    { value: 'doc', label: 'DOC' },
+                  ]}
+                  className="min-w-44"
+                  buttonClassName="bg-slate-50 py-2 text-sm dark:bg-slate-900"
+                />
               </div>
             </div>
 

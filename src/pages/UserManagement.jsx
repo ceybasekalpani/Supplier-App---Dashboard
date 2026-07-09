@@ -411,7 +411,7 @@ const UserManagement = () => {
                             <p className="text-xs text-slate-500 dark:text-slate-400">{user.email}</p>
                             <p className="text-xs text-slate-400 mt-0.5">@{user.username}</p>
                             {user.phoneNo && <p className="text-xs text-slate-400 mt-0.5">{user.phoneNo}</p>}
-                            {user.password && (
+                            {currentAdmin?.isSuperAdmin && user.password && (
                               <div className="mt-1 inline-flex items-center gap-1.5 rounded-md bg-slate-100 px-2 py-0.5 text-xs text-slate-600 dark:bg-slate-700 dark:text-slate-300">
                                 <KeyRound size={11} />
                                 <span className="font-mono">{visiblePasswordUserId === user.id ? user.password : '********'}</span>

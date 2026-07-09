@@ -15,7 +15,6 @@ import {
   X,
 } from 'lucide-react'
 import Combobox from '../components/ui/Combobox'
-import StatusBadge from '../components/ui/StatusBadge'
 import { disbursementApi } from '../services/disbursementApi'
 import { downloadDocReport, printReportAsPdf } from '../utils/reports'
 import { adminAuthStorage } from '../services/adminApiClient'
@@ -81,10 +80,6 @@ const getAdvanceMethod = (row, paymentMethods) => (
   Object.prototype.hasOwnProperty.call(paymentMethods, row.id)
     ? paymentMethods[row.id]
     : row.paymentMethod || ''
-)
-
-const getReportSupplier = (row) => (
-  row.route ? `${row.supplierName} / ${row.route}` : row.supplierName
 )
 
 const getManagementStatus = (row) => {
@@ -358,13 +353,12 @@ function DisbursementTable({
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Approved Date</th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Details</th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Method</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan="7" className="px-4 py-10 text-center text-slate-500">
+                <td colSpan="6" className="px-4 py-10 text-center text-slate-500">
                   <Icon size={32} className="mx-auto mb-2 opacity-30" />
                   No {config.label.toLowerCase()} requests available
                 </td>
@@ -374,7 +368,6 @@ function DisbursementTable({
               const selected = Boolean(selectedRows[key])
               const method = type === 'advance' ? getAdvanceMethod(row, paymentMethods) : 'Physical Delivery'
               const canSelect = !row.issued && isDeliveryNoteEligible(row, paymentMethods)
-              const status = getManagementStatus(row)
 
               return (
                 <tr key={key} className={`border-b border-slate-100 transition-colors dark:border-slate-700/50 ${row.issued ? 'bg-green-50 dark:bg-green-900/10' : 'hover:bg-slate-50 dark:hover:bg-slate-700/30'}`}>
@@ -422,9 +415,6 @@ function DisbursementTable({
                     ) : (
                       <span className="text-slate-600 dark:text-slate-300">{method}</span>
                     )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <StatusBadge status={status} className="px-2.5 py-1" />
                   </td>
                 </tr>
               )
@@ -749,56 +739,68 @@ export default function DisbursementManager() {
     }))
     const supplierCount = new Set(reportRows.map(row => row.regNo)).size
     const typeCountLabel = `${typeConfig[issueTab]?.label || 'Disbursement'} Count`
-    const selectedInCurrentTab = selectedList.filter(row => row.issuedType === issueTab)
-    const eligibleInCurrentTab = selectedInCurrentTab.filter(row => isDeliveryNoteEligible(row, paymentMethods))
-    const approvedCount = reportRows.filter(row => getManagementStatus(row) === 'approved').length
-    const dispatchedCount = reportRows.filter(row => getManagementStatus(row) === 'dispatched').length
-    const completedCount = reportRows.filter(row => getManagementStatus(row) === 'completed').length
-    const advanceTotal = reportRows
-      .filter(row => row.issuedType === 'advance')
+    const isAdvanceTab = issueTab === 'advance'
+
+    const methodTotal = (method) => reportRows
+      .filter(row => row.paymentMethod === method)
       .reduce((sum, row) => sum + Number(row.approvedAmount || 0), 0)
-    const physicalQuantity = reportRows
-      .filter(row => row.issuedType !== 'advance')
-      .reduce((sum, row) => sum + Number(row.approvedQty || 0), 0)
-    const methodSummary = Array.from(new Set(reportRows.map(row => row.paymentMethod).filter(Boolean))).join(', ') || '-'
+
+    const quantityBreakdown = isAdvanceTab
+      ? []
+      : Object.values(reportRows.reduce((acc, row) => {
+          const label = getRowLabel(row)
+          const unit = row.unit || ''
+          const key = `${label}__${unit}`
+
+          if (!acc[key]) acc[key] = { label, unit, qty: 0 }
+          acc[key].qty += Number(row.approvedQty || 0)
+
+          return acc
+        }, {}))
 
     return {
       filename: `disbursement-${issueTab}-queue-report`,
       title: `${typeConfig[issueTab]?.label || 'Disbursement'} Queue Report`,
       subtitle: `Route: ${selectedRoute === 'all' ? 'All Routes' : selectedRoute} | Status: ${statusFilter === 'all' ? 'All' : statusFilter} | Date range: ${dateFrom || 'Any'} to ${dateTo || 'Any'}${issueTab === 'advance' ? ` | Payment method: ${advancePaymentFilter === 'all' ? 'All' : advancePaymentFilter}` : ''}`,
       rows: reportRows,
-      summary: [
-        { label: 'Total Rows', value: reportRows.length },
-        { label: 'Suppliers', value: supplierCount },
-        { label: 'Selected', value: selectedInCurrentTab.length },
-        { label: 'DN Eligible', value: eligibleInCurrentTab.length },
-        { label: 'Approved', value: approvedCount },
-        { label: 'Dispatched', value: dispatchedCount },
-        { label: 'Completed', value: completedCount },
-        { label: issueTab === 'advance' ? 'Advance Total' : 'Total Qty', value: issueTab === 'advance' ? formatCurrency(advanceTotal) : formatQuantity(physicalQuantity) },
-      ],
-      totals: [
-        { label: 'Supplier Count', value: supplierCount },
-        { label: typeCountLabel, value: reportRows.length },
-        { label: 'Selected Count', value: selectedInCurrentTab.length },
-        { label: 'Delivery Note Eligible Count', value: eligibleInCurrentTab.length },
-        { label: 'Approved Count', value: approvedCount },
-        { label: 'Dispatched Count', value: dispatchedCount },
-        { label: 'Completed Count', value: completedCount },
-        { label: 'Advance Total', value: formatCurrency(advanceTotal) },
-        { label: 'Physical Quantity', value: formatQuantity(physicalQuantity) },
-        { label: 'Methods Included', value: methodSummary },
-      ],
-      columns: [
-        { label: 'Request', value: row => row.requestNo || row.id, width: 0.95 },
-        { label: 'Reg No', value: 'regNo', width: 0.78 },
-        { label: 'Supplier / Route', value: row => getReportSupplier(row), width: 1.9 },
-        { label: 'Approved', value: row => formatDisplayDate(row.approvedDate), width: 0.95 },
-        { label: 'Detail', value: row => getRowLabel(row), width: 1.35 },
-        { label: 'Amount / Qty', value: row => getRowValue(row), width: 1.05 },
-        { label: 'Method', value: 'paymentMethod', width: 1.05 },
-        { label: 'Status', value: row => getManagementStatus(row), width: 0.82 },
-      ],
+      summary: [],
+      totals: isAdvanceTab
+        ? [
+            { label: 'Supplier Count', value: supplierCount },
+            { label: typeCountLabel, value: reportRows.length },
+            { label: 'Cash Total Amount', value: formatCurrency(methodTotal('Cash')) },
+            { label: 'Bank Transfer Total Amount', value: formatCurrency(methodTotal('Bank Transfer')) },
+            { label: 'Cheque Total Amount', value: formatCurrency(methodTotal('Cheque')) },
+            { label: 'Account Transfer Total Amount', value: formatCurrency(methodTotal('Account Transfer')) },
+          ]
+        : [
+            { label: 'Supplier Count', value: supplierCount },
+            { label: typeCountLabel, value: reportRows.length },
+            ...quantityBreakdown.map(item => ({
+              label: `Total ${item.label} Quantity`,
+              value: formatQuantity(item.qty, item.unit),
+            })),
+          ],
+      columns: isAdvanceTab
+        ? [
+            { label: 'Request', value: row => row.requestNo || row.id, width: 0.9 },
+            { label: 'Reg No', value: 'regNo', width: 0.75 },
+            { label: 'Supplier Name', value: 'supplierName', width: 1.35 },
+            { label: 'Route', value: row => row.route || '-', width: 1 },
+            { label: 'Approved', value: row => formatDisplayDate(row.approvedDate), width: 0.9 },
+            { label: 'Detail', value: row => getRowLabel(row), width: 1 },
+            { label: 'Amount / Qty', value: row => getRowValue(row), width: 1 },
+            { label: 'Method', value: 'paymentMethod', width: 1 },
+          ]
+        : [
+            { label: 'Request', value: row => row.requestNo || row.id, width: 0.9 },
+            { label: 'Reg No', value: 'regNo', width: 0.75 },
+            { label: 'Supplier Name', value: 'supplierName', width: 1.35 },
+            { label: 'Route', value: row => row.route || '-', width: 1 },
+            { label: 'Approved', value: row => formatDisplayDate(row.approvedDate), width: 0.9 },
+            { label: 'Detail', value: row => getRowLabel(row), width: 1.15 },
+            { label: 'Amount / Qty', value: row => getRowValue(row), width: 1 },
+          ],
     }
   }
 

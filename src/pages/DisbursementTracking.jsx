@@ -74,21 +74,6 @@ const formatDateTime = (date) => {
   })
 }
 
-const formatDisplayTime = (date) => {
-  if (!date) return '-'
-
-  const value = String(date)
-  if (!value.includes('T') && !/\d{1,2}:\d{2}/.test(value)) return '-'
-
-  const parsedDate = new Date(date)
-  if (Number.isNaN(parsedDate.getTime())) return '-'
-
-  return parsedDate.toLocaleTimeString('en-LK', {
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-
 const hasDisplayTime = (date) => {
   const value = String(date || '')
   return value.includes('T') || /\d{1,2}:\d{2}/.test(value)
@@ -495,6 +480,25 @@ const parseTrackingValue = (item) => {
     unit,
     formatter: value => formatQuantity(value, unit),
   }
+}
+
+const summarizeQuantityByName = (rows) => {
+  const totals = rows.reduce((acc, row) => {
+    const parsed = parseTrackingValue(row)
+    const key = normalizeText(parsed.name)
+
+    if (!acc[key]) acc[key] = { name: parsed.name, unit: parsed.unit, qty: 0 }
+    acc[key].qty += Number(parsed.value || 0)
+
+    return acc
+  }, {})
+
+  return Object.values(totals)
+}
+
+const formatQuantityBreakdown = (rows) => {
+  const items = summarizeQuantityByName(rows)
+  return items.length ? items.map(item => `${item.name}: ${formatQuantity(item.qty, item.unit)}`) : ['-']
 }
 
 const findTrackingRecordForDetail = (detail, note, trackingRows) => {
@@ -1015,6 +1019,7 @@ export default function DisbursementTracking() {
 
   const buildFocusedDisbursementReport = ({ issuedType = '', paymentMethod = '' }) => {
     const normalizedPayment = normalizePaymentMethod(paymentMethod)
+    const isPaymentReport = !issuedType && normalizedPayment
     const typeLabel = issuedType ? typeStyles[issuedType]?.label || 'Items' : 'All Types'
     const paymentLabel = normalizedPayment ? paymentMethodLabels[normalizedPayment] || paymentMethod : 'All Payment Methods'
     const hideDeliveryNoteNo = ['account-transfer', 'bank-transfer', 'cheque'].includes(normalizedPayment)
@@ -1023,29 +1028,52 @@ export default function DisbursementTracking() {
       const samePayment = !normalizedPayment || normalizePaymentMethod(getPaymentMethod(row)) === normalizedPayment
       return sameType && samePayment
     })
-    const totalAmount = rows
-      .filter(row => row.issuedType === 'advance')
-      .reduce((sum, row) => sum + Number(parseTrackingValue(row).value || 0), 0)
-    const totalQuantity = rows
-      .filter(row => row.issuedType !== 'advance')
-      .reduce((sum, row) => sum + Number(parseTrackingValue(row).value || 0), 0)
-    const showPhysicalQuantity = issuedType !== 'advance'
-    const summary = [
-      { label: 'Records', value: rows.length },
-      { label: 'Suppliers', value: new Set(rows.map(row => row.regNo)).size },
-      { label: 'Completed', value: rows.filter(row => getReceiptStatus(row.currentStatus || row.status) === 'completed').length },
-      { label: 'Awaiting', value: rows.filter(row => getReceiptStatus(row.currentStatus || row.status) === 'awaiting').length },
-      { label: 'Advance Total', value: formatCurrency(totalAmount) },
-      ...(showPhysicalQuantity ? [{ label: 'Physical Qty', value: formatQuantity(totalQuantity) }] : []),
-    ]
-    const totals = [
-      { label: 'Supplier Count', value: new Set(rows.map(row => row.regNo)).size },
-      { label: 'Advance Count', value: rows.filter(row => row.issuedType === 'advance').length },
-      { label: 'Fertilizer Count', value: rows.filter(row => row.issuedType === 'fertilizer').length },
-      { label: 'Item Count', value: rows.filter(row => row.issuedType === 'items').length },
-      { label: 'Advance Total', value: formatCurrency(totalAmount) },
-      ...(showPhysicalQuantity ? [{ label: 'Physical Quantity', value: formatQuantity(totalQuantity) }] : []),
-    ]
+    const supplierCount = new Set(rows.map(row => row.regNo)).size
+    const advanceRows = rows.filter(row => row.issuedType === 'advance')
+    const fertilizerRows = rows.filter(row => row.issuedType === 'fertilizer')
+    const itemRows = rows.filter(row => row.issuedType === 'items')
+    const advanceTotal = advanceRows.reduce((sum, row) => sum + Number(parseTrackingValue(row).value || 0), 0)
+    const fertilizerQuantityBreakdown = summarizeQuantityByName(fertilizerRows).map(item => ({
+      label: `${item.name} Quantity`,
+      value: formatQuantity(item.qty, item.unit),
+    }))
+    const itemQuantityBreakdown = summarizeQuantityByName(itemRows).map(item => ({
+      label: `${item.name} Quantity`,
+      value: formatQuantity(item.qty, item.unit),
+    }))
+    const completedCount = rows.filter(row => getReceiptStatus(row.currentStatus || row.status) === 'completed').length
+    const awaitingCount = rows.filter(row => getReceiptStatus(row.currentStatus || row.status) === 'awaiting').length
+
+    const totalsByKind = {
+      advance: [
+        { label: 'Supplier Count', value: supplierCount },
+        { label: 'Advance Count', value: advanceRows.length },
+        { label: 'Advance Total', value: formatCurrency(advanceTotal) },
+        { label: 'Completed Count', value: completedCount },
+        { label: 'Awaiting Count', value: awaitingCount },
+      ],
+      fertilizer: [
+        { label: 'Supplier Count', value: supplierCount },
+        { label: 'Fertilizer Count', value: fertilizerRows.length },
+        ...fertilizerQuantityBreakdown,
+      ],
+      items: [
+        { label: 'Supplier Count', value: supplierCount },
+        { label: 'Item Count', value: itemRows.length },
+        ...itemQuantityBreakdown,
+      ],
+      payment: [
+        { label: 'Supplier Count', value: supplierCount },
+        { label: 'Advance Count', value: advanceRows.length },
+        { label: 'Advance Total', value: formatCurrency(advanceTotal) },
+      ],
+    }
+    const totals = totalsByKind[issuedType] || totalsByKind.payment
+
+    const showItemDetailColumn = issuedType === 'fertilizer' || issuedType === 'items'
+    const showPaymentColumn = issuedType === 'advance' || isPaymentReport
+    const showRouteColumn = issuedType === 'fertilizer'
+    const amountQtyLabel = issuedType === 'fertilizer' ? 'Qty' : 'Amount / Qty'
 
     return {
       filename: [
@@ -1053,10 +1081,10 @@ export default function DisbursementTracking() {
         normalizedPayment || '',
         'report',
       ].filter(Boolean).join('-'),
-      title: `${typeLabel} Disbursement Report`,
+      title: isPaymentReport ? `${paymentLabel} Payment Report` : `${typeLabel} Disbursement Report`,
       subtitle: `Payment: ${paymentLabel} | Status: ${statusFilter === 'all' ? 'All' : statusFilter} | Date: ${dateFilter || 'Any'} | Search: ${searchTerm || 'None'}`,
       rows,
-      summary,
+      summary: [],
       totals,
       columns: [
         { label: 'Request No', value: 'requestNo', width: 1.05 },
@@ -1064,9 +1092,10 @@ export default function DisbursementTracking() {
         { label: 'Reg No', value: 'regNo', width: 0.75 },
         { label: 'Supplier Name', value: 'supplierName', width: 1.55 },
         { label: 'Type', value: row => typeStyles[row.issuedType]?.label || 'Item', width: 0.85 },
-        { label: 'Item / Detail', value: row => parseTrackingValue(row).name, width: 1.35 },
-        { label: 'Amount / Qty', value: row => formatByUnit(parseTrackingValue(row).value, parseTrackingValue(row).unit), width: 1 },
-        { label: 'Payment', value: row => getPaymentMethod(row), width: 1.05 },
+        ...(showItemDetailColumn ? [{ label: 'Item', value: row => parseTrackingValue(row).name, width: 1.3 }] : []),
+        { label: amountQtyLabel, value: row => formatByUnit(parseTrackingValue(row).value, parseTrackingValue(row).unit), width: 1 },
+        ...(showRouteColumn ? [{ label: 'Route', value: row => row.route || row.routeName || '-', width: 1.35 }] : []),
+        ...(showPaymentColumn ? [{ label: 'Payment', value: row => getPaymentMethod(row), width: 1.05 }] : []),
         { label: 'Dispatch Date', value: row => formatDateTime(row.issueDate || row.dispatchedAt), width: 1.15 },
         { label: 'Receipt', value: row => getDisplayStatus(getReceiptStatus(row.currentStatus || row.status)), width: 0.85 },
       ],
@@ -1129,13 +1158,7 @@ export default function DisbursementTracking() {
     title: 'Disbursement Tracking Report',
     subtitle: `Status: ${statusFilter === 'all' ? 'All' : statusFilter} | Date: ${dateFilter || 'Any'} | Search: ${searchTerm || 'None'}`,
     rows: filteredRows,
-    summary: [
-      { label: 'Tracking Records', value: filteredRows.length },
-      { label: 'Suppliers', value: new Set(filteredRows.map(row => row.regNo)).size },
-      { label: 'Awaiting', value: awaitingCount },
-      { label: 'Dispatched', value: dispatchedCount },
-      { label: 'Completed', value: completedCount },
-    ],
+    summary: [],
     totals: [
       { label: 'Supplier Count', value: new Set(filteredRows.map(row => row.regNo)).size },
       { label: 'Advance Count', value: filteredRows.filter(row => row.issuedType === 'advance').length },
@@ -1150,10 +1173,10 @@ export default function DisbursementTracking() {
       { label: 'Reg No', value: 'regNo', width: 0.8 },
       { label: 'Supplier Name', value: 'supplierName', width: 1.7 },
       { label: 'Type', value: 'issuedType', width: 0.8 },
-      { label: 'Item / Detail', value: row => parseTrackingValue(row).name, width: 1.4 },
+      { label: 'Item', value: row => parseTrackingValue(row).name, width: 1.4 },
       { label: 'Amount / Qty', value: row => formatByUnit(parseTrackingValue(row).value, parseTrackingValue(row).unit), width: 1 },
       { label: 'Method', value: 'method', width: 1 },
-      { label: 'Dispatch Date / Time', value: row => formatDateTime(row.issueDate), width: 1.15 },
+      { label: 'Dispatch Date', value: row => formatDateTime(row.issueDate), width: 1.15 },
       { label: 'Status', value: row => getDisplayStatus(row.currentStatus), width: 0.8 },
     ],
   })
@@ -1162,18 +1185,25 @@ export default function DisbursementTracking() {
     const noteIds = new Set(deliveryNotes.map(note => note.id))
     const detailRows = filteredRows.filter(row => noteIds.has(row.deliveryNoteId))
 
+    const reportRows = borrowerDispatchGroups.map(group => {
+      const groupRows = filteredRows.filter(row => isTrackingRowAssignedToNote(row, group))
+
+      const advanceRows = groupRows.filter(row => row.issuedType === 'advance')
+
+      return {
+        ...group,
+        advanceAmount: formatCurrency(advanceRows.reduce((sum, row) => sum + Number(parseTrackingValue(row).value || 0), 0)),
+        fertilizerBreakdown: formatQuantityBreakdown(groupRows.filter(row => row.issuedType === 'fertilizer')),
+        itemBreakdown: formatQuantityBreakdown(groupRows.filter(row => row.issuedType === 'items')),
+      }
+    })
+
     return ({
       filename: 'delivery-note-borrower-report',
       title: 'Borrower Delivery Note Report',
       subtitle: `Status: ${statusFilter === 'all' ? 'All' : statusFilter} | Date: ${dateFilter || 'Any'} | Search: ${searchTerm || 'None'}`,
-      rows: borrowerDispatchGroups,
-      summary: [
-        { label: 'Borrowers', value: borrowerDispatchGroups.length },
-        { label: 'Suppliers', value: new Set(detailRows.map(row => row.regNo)).size || '-' },
-        { label: 'Dispatched', value: deliveryNotes.filter(note => ['issued', 'dispatched'].includes(normalizeTrackingStatus(note.status))).length },
-        { label: 'Returned', value: deliveryNotes.filter(note => note.status === 'returned').length },
-        { label: 'Completed', value: deliveryNotes.filter(note => note.status === 'completed').length },
-      ],
+      rows: reportRows,
+      summary: [],
       totals: [
         { label: 'Supplier Count', value: new Set(detailRows.map(row => row.regNo)).size || '-' },
         { label: 'Advance Count', value: detailRows.filter(row => row.issuedType === 'advance').length },
@@ -1183,14 +1213,16 @@ export default function DisbursementTracking() {
         { label: 'Total Dispatched Records', value: deliveryNotes.reduce((sum, note) => sum + Number(note.totalRecords || 0), 0) },
       ],
       columns: [
-        { label: 'DN No', value: row => row.deliveryNoteNos?.join(', ') || row.deliveryNoteNo || '-', width: 1.15 },
-        { label: 'Dispatch Date', value: row => formatDateTime(row.dispatchDate), width: 1.3 },
-        { label: 'Borrower Name', value: 'borrowerName', width: 1.5 },
-        { label: 'Borrower Role', value: 'borrowerRole', width: 1.1 },
-        { label: 'Vehicle No', value: 'vehicleNo', width: 0.85 },
-        { label: 'Route', value: 'routeName', width: 1.35 },
-        { label: 'Records', value: 'totalRecords', width: 0.65 },
-        { label: 'Status', value: 'status', width: 0.8 },
+        { label: 'DN No', value: row => row.deliveryNoteNos?.join(', ') || row.deliveryNoteNo || '-', width: 1.1 },
+        { label: 'Dispatch Date', value: row => formatDateTime(row.dispatchDate), width: 1.2 },
+        { label: 'Borrower Name', value: 'borrowerName', width: 1.3 },
+        { label: 'Borrower Role', value: 'borrowerRole', width: 1 },
+        { label: 'Vehicle No', value: 'vehicleNo', width: 0.8 },
+        { label: 'Route', value: 'routeName', width: 1.6 },
+        { label: 'Advance Amount', value: 'advanceAmount', width: 1 },
+        { label: 'Fertilizer (Qty)', value: 'fertilizerBreakdown', width: 1.6 },
+        { label: 'Item (Qty)', value: 'itemBreakdown', width: 1.6 },
+        { label: 'Status', value: 'status', width: 0.7 },
       ],
     })
   }
@@ -1217,16 +1249,7 @@ export default function DisbursementTracking() {
       filename: `${safeDnNo}-${safeBorrowerName}-${dispatchDate}`,
       title: `Selected Delivery Note - ${dnNo}`,
       rows: selectedBorrowerDetails,
-      summary: [
-        { label: 'Delivery Note No', value: dnNo },
-        { label: 'Borrower', value: borrowerName },
-        { label: 'Route', value: selectedNote?.routeName || '-' },
-        { label: 'Vehicle No', value: selectedNote?.vehicleNo || '-' },
-        { label: 'Dispatch Date', value: formatDisplayDate(selectedNote?.dispatchDate) },
-        { label: 'Dispatch Time', value: formatDisplayTime(selectedNote?.dispatchDate) },
-        { label: 'Suppliers', value: supplierCount },
-        { label: 'Records', value: selectedBorrowerDetails.length },
-      ],
+      summary: [],
       totals: [
         { label: 'Supplier Count', value: supplierCount },
         { label: 'Advance Total', value: formatCurrency(advanceTotal) },

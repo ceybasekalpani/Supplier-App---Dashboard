@@ -18,6 +18,20 @@ const getCellValue = (row, column) => (
   typeof column.value === 'function' ? column.value(row) : row[column.value]
 )
 
+// Some columns (e.g. quantity breakdowns) return an array of strings so each
+// entry renders on its own line instead of being run together in one line.
+const renderCellHtml = (value) => (
+  Array.isArray(value)
+    ? value.map(item => `<div>${escapeHtml(item)}</div>`).join('')
+    : escapeHtml(value)
+)
+
+const wrapCellValue = (value, maxChars, maxLines) => (
+  Array.isArray(value)
+    ? value.flatMap(item => wrapPdfText(item, maxChars, maxLines))
+    : wrapPdfText(value, maxChars, maxLines)
+)
+
 const columnWidthPercent = (column, columns) => {
   const total = columns.reduce((sum, item) => sum + Number(item.width || 1), 0) || columns.length || 1
   return `${(Number(column.width || 1) / total) * 100}%`
@@ -94,17 +108,23 @@ const buildSignatureHtml = (signatures) => {
   `
 }
 
-export const buildReportHtml = ({ title, subtitle = '', introText = '', closingText = '', tableTitle = 'Detailed Records', reportVariant = '', columns, rows, summary = [], totals = [], signatures = [] }) => {
+export const buildReportHtml = ({ title, introText = '', closingText = '', tableTitle = 'Detailed Records', reportVariant = '', columns, rows, summary = [], totals = [], signatures = [] }) => {
   const generatedAt = reportDate()
   const isLetter = reportVariant === 'letter'
 
   return `<!doctype html>
-<html>
+<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
 <head>
   <meta charset="utf-8" />
   <title>${escapeHtml(title)}</title>
   <style>
     @page { size: A4 landscape; margin: 14mm 12mm; }
+    @page Section1 {
+      size: 842.0pt 595.0pt;
+      mso-page-orientation: landscape;
+      margin: 40.0pt 34.0pt 40.0pt 34.0pt;
+    }
+    div.Section1 { page: Section1; }
     * { box-sizing: border-box; }
     body {
       font-family: Arial, Helvetica, sans-serif;
@@ -464,6 +484,7 @@ export const buildReportHtml = ({ title, subtitle = '', introText = '', closingT
   </style>
 </head>
 <body class="${isLetter ? 'letter-report' : ''}">
+  <div class="Section1">
   <div class="page-frame">
     <table class="report-shell">
       <tr class="hero">
@@ -516,7 +537,7 @@ export const buildReportHtml = ({ title, subtitle = '', introText = '', closingT
               <tr>${columns.map(column => `<th>${escapeHtml(column.label)}</th>`).join('')}</tr>
             </thead>
             <tbody>
-              ${rows.map(row => `<tr>${columns.map(column => `<td>${escapeHtml(getCellValue(row, column))}</td>`).join('')}</tr>`).join('')}
+              ${rows.map(row => `<tr>${columns.map(column => `<td>${renderCellHtml(getCellValue(row, column))}</td>`).join('')}</tr>`).join('')}
             </tbody>
           </table>
         `}
@@ -544,6 +565,7 @@ export const buildReportHtml = ({ title, subtitle = '', introText = '', closingT
         </tr>
       </table>
     </div>
+  </div>
   </div>
 </body>
 </html>`
@@ -633,17 +655,112 @@ const getPdfColumnWidths = (columns, usableWidth) => {
   return columns.map(column => (Number(column.width || 1) / total) * usableWidth)
 }
 
-const chunkRowsForPdf = (rows, firstPageCapacity, nextPageCapacity) => {
-  if (rows.length === 0) return [[]]
+// High enough that realistic cell content (remarks, addresses, etc.) never gets
+// truncated with an ellipsis - rows grow to fit their own content instead.
+const MAX_CELL_LINES = 60
+const MIN_CONTENT_Y = 40
+const BODY_CELL_CHAR_WIDTH = 4.2
+const HEADER_CELL_CHAR_WIDTH = 5.2
+const CELL_HORIZONTAL_PADDING = 8
 
+// Character-count estimate is intentionally conservative (wider average glyph
+// width than a literal average) since this PDF is hand-built with no real font
+// metrics - erring wide keeps wrapped text safely inside the column instead of
+// spilling past its right edge.
+const estimateMaxChars = (columnWidth, charWidth, padding = CELL_HORIZONTAL_PADDING) => (
+  Math.max(6, Math.floor((columnWidth - padding) / charWidth))
+)
+
+const measureRowPlan = (row, tableColumns, columnWidths) => {
+  const cellLines = tableColumns.map((column, index) => wrapCellValue(
+    getCellValue(row, column),
+    estimateMaxChars(columnWidths[index], BODY_CELL_CHAR_WIDTH),
+    MAX_CELL_LINES
+  ))
+  const maxLines = Math.max(1, ...cellLines.map(lines => lines.length))
+  const height = Math.ceil(9 + (maxLines * 7.4) + 6)
+
+  return { row, cellLines, maxLines, height }
+}
+
+const measureSummaryHeight = (summary) => {
+  if (!summary?.length) return 0
+
+  const columnsPerRow = summary.length === 5 ? 5 : 4
+  const rowCount = Math.ceil(Math.min(summary.length, 8) / columnsPerRow)
+  return 16 + (rowCount * 39) + 12
+}
+
+const measureLetterTextHeight = (text) => {
+  if (!text) return 0
+  return 34 + (wrapPdfText(text, 126, 8).length * 12)
+}
+
+const measureIntroHeight = (introText) => (introText ? 14 + measureLetterTextHeight(introText) : 0)
+
+const measureTotalsHeight = (totals) => {
+  if (!totals?.length) return 0
+  return 22 + (getTotalsLayout(totals.length).rowsPerColumn * 20)
+}
+
+const measureClosingHeight = (closingText) => (closingText ? 4 + measureLetterTextHeight(closingText) : 0)
+
+const measureSignaturesHeight = (signatures, reportVariant) => (
+  signatures?.length ? (reportVariant === 'letter' ? 34 : 8) + (signatures.length * 48) : 0
+)
+
+const measureTrailerHeight = (report) => (
+  (report.totals?.length ? 18 + measureTotalsHeight(report.totals) : 0) +
+  measureClosingHeight(report.closingText) +
+  measureSignaturesHeight(report.signatures, report.reportVariant)
+)
+
+const measureContentStartY = (isFirstPage, report) => {
+  let y = 595 - 112
+
+  if (isFirstPage) {
+    y -= measureSummaryHeight(report.summary)
+    y -= measureIntroHeight(report.introText)
+  }
+
+  y -= 18 // table title
+  y -= 18 // column header row
+
+  return y
+}
+
+const planPdfPages = (report, rowPlans) => {
   const pages = []
   let cursor = 0
-  let capacity = firstPageCapacity
+  let pageIndex = 0
 
-  while (cursor < rows.length) {
-    pages.push(rows.slice(cursor, cursor + capacity))
-    cursor += capacity
-    capacity = nextPageCapacity
+  do {
+    const isFirstPage = pageIndex === 0
+    let y = measureContentStartY(isFirstPage, report)
+    const pageRowPlans = []
+
+    while (cursor < rowPlans.length) {
+      const candidate = rowPlans[cursor]
+      if (y - candidate.height < MIN_CONTENT_Y && pageRowPlans.length > 0) break
+
+      pageRowPlans.push(candidate)
+      y -= candidate.height
+      cursor++
+
+      if (y < MIN_CONTENT_Y) break
+    }
+
+    const isLastRowPage = cursor >= rowPlans.length
+    const trailerHeight = isLastRowPage ? measureTrailerHeight(report) : 0
+    const hasTrailer = isLastRowPage && (trailerHeight === 0 || (y - trailerHeight) >= MIN_CONTENT_Y)
+
+    pages.push({ rowPlans: pageRowPlans, isLastRowPage, hasTrailer, trailerOnlyPage: false })
+    pageIndex++
+  } while (cursor < rowPlans.length)
+
+  const lastPage = pages[pages.length - 1]
+  if (lastPage.isLastRowPage && !lastPage.hasTrailer) {
+    pages.push({ rowPlans: [], isLastRowPage: true, hasTrailer: true, trailerOnlyPage: true })
   }
 
   return pages
@@ -676,21 +793,34 @@ const drawPdfFooter = (commands) => {
   commands.push(drawText('Generated from verified dashboard records', width - 222, 20, 7.2, { color: [0.42, 0.46, 0.4] }))
 }
 
+const getTotalsLayout = (totalsLength) => {
+  const columns = totalsLength > 7 ? 2 : 1
+  return { columns, rowsPerColumn: Math.ceil(totalsLength / columns) }
+}
+
 const drawPdfTotals = (commands, totals, y) => {
   if (!totals?.length) return y
 
   commands.push(drawText('Report Totals', 28, y, 12, { bold: true, color: [0.19, 0.37, 0.28] }))
   y -= 22
-  totals.slice(0, 14).forEach((item, index) => {
-    const rowY = y - (index * 20)
-    commands.push(drawRect(28, rowY - 14, 360, 18, [1, 1, 1], [0.76, 0.84, 0.7]))
-    commands.push(drawRect(28, rowY - 14, 4, 18, [0.83, 0.66, 0.29]))
-    commands.push(drawRect(288, rowY - 14, 100, 18, [0.95, 0.98, 0.92], [0.79, 0.86, 0.75]))
-    commands.push(drawText(item.label, 38, rowY - 8, 8.8, { bold: true, color: [0.19, 0.33, 0.24] }))
-    commands.push(drawCenteredText(item.value, 288, rowY - 8, 100, 9, { bold: true, color: [0.19, 0.37, 0.28] }))
+
+  const { rowsPerColumn } = getTotalsLayout(totals.length)
+  const columnGap = 395
+
+  totals.forEach((item, index) => {
+    const column = Math.floor(index / rowsPerColumn)
+    const rowInColumn = index % rowsPerColumn
+    const colX = 28 + (column * columnGap)
+    const rowY = y - (rowInColumn * 20)
+
+    commands.push(drawRect(colX, rowY - 14, 360, 18, [1, 1, 1], [0.76, 0.84, 0.7]))
+    commands.push(drawRect(colX, rowY - 14, 4, 18, [0.83, 0.66, 0.29]))
+    commands.push(drawRect(colX + 260, rowY - 14, 100, 18, [0.95, 0.98, 0.92], [0.79, 0.86, 0.75]))
+    commands.push(drawText(item.label, colX + 10, rowY - 8, 8.8, { bold: true, color: [0.19, 0.33, 0.24] }))
+    commands.push(drawCenteredText(item.value, colX + 260, rowY - 8, 100, 9, { bold: true, color: [0.19, 0.37, 0.28] }))
   })
 
-  return y - (totals.length * 20)
+  return y - (rowsPerColumn * 20)
 }
 
 const drawPdfLetterText = (commands, text, y) => {
@@ -729,12 +859,13 @@ const drawPdfSignatures = (commands, signatures, y) => {
   return y - (signatures.length * 48)
 }
 
-const buildPdfPageContent = (report, pageRows, pageIndex, pageCount, startIndex, isLastPage) => {
+const buildPdfPageContent = (report, tableColumns, columnWidths, pagePlan, pageIndex, pageCount, startRowIndex) => {
   const width = 842
   const height = 595
   const margin = 28
   const usableWidth = width - (margin * 2)
   const commands = []
+  const isFirstPage = pageIndex === 0
 
   drawPdfHeader(commands, {
     title: report.title || 'Report',
@@ -746,7 +877,7 @@ const buildPdfPageContent = (report, pageRows, pageIndex, pageCount, startIndex,
 
   let y = height - 112
 
-  if (pageIndex === 0) {
+  if (isFirstPage) {
     if (report.summary?.length > 0) {
       commands.push(drawText('Key Summary', margin, y, 11, { bold: true, color: [0.19, 0.37, 0.28] }))
       y -= 16
@@ -774,70 +905,72 @@ const buildPdfPageContent = (report, pageRows, pageIndex, pageCount, startIndex,
     }
   }
 
-  commands.push(drawText(report.tableTitle || 'Detailed Records', margin, y, 11, { bold: true, color: [0.19, 0.37, 0.28] }))
-  y -= 18
-
-  const tableColumns = report.columns?.length ? report.columns : [{ label: 'Record', value: row => JSON.stringify(row), width: 1 }]
-  const columnWidths = getPdfColumnWidths(tableColumns, usableWidth)
-  const headerHeight = 18
-  const rowHeight = 23
-
-  commands.push(drawRect(margin, y - headerHeight, usableWidth, headerHeight, [0.27, 0.45, 0.21], [0.21, 0.35, 0.16]))
-  let headerX = margin
-  tableColumns.forEach((column, index) => {
-    const x = headerX
-    const columnWidth = columnWidths[index]
-    if (index > 0) commands.push(drawRect(x, y - headerHeight, 0.4, headerHeight, null, [0.75, 0.83, 0.72]))
-    wrapPdfText(column.label, Math.max(7, Math.floor(columnWidth / 4.6)), 2).forEach((line, lineIndex) => {
-      commands.push(drawCenteredText(line, x, y - 8 - (lineIndex * 7), columnWidth, 7, { bold: true, color: [1, 1, 1] }))
-    })
-    headerX += columnWidth
-  })
-  y -= headerHeight
-
-  if (pageRows.length === 0) {
-    commands.push(drawRect(margin, y - 42, usableWidth, 42, [1, 1, 1], [0.8, 0.85, 0.75]))
-    commands.push(drawText('No records available for this report.', margin + 10, y - 25, 10, { color: [0.4, 0.46, 0.38] }))
-  } else {
-    pageRows.forEach((row, rowIndex) => {
-      const fill = (startIndex + rowIndex) % 2 === 1 ? [0.97, 0.98, 0.95] : [1, 1, 1]
-      commands.push(drawRect(margin, y - rowHeight, usableWidth, rowHeight, fill, [0.78, 0.82, 0.75]))
-      let cellX = margin
-      tableColumns.forEach((column, index) => {
-        const x = cellX
-        const columnWidth = columnWidths[index]
-        if (index > 0) commands.push(drawRect(x, y - rowHeight, 0.25, rowHeight, null, [0.82, 0.86, 0.79]))
-        const cellLines = wrapPdfText(getCellValue(row, column), Math.max(8, Math.floor(columnWidth / 3.7)), 2)
-        const lineStartY = y - 9 - Math.max(0, (2 - cellLines.length) * 3.4)
-        cellLines.forEach((line, lineIndex) => {
-          const isFirstColumn = index === 0
-          const shouldCenter = column.align === 'center'
-          const textCommand = shouldCenter
-            ? drawCenteredText(line, x, lineStartY - (lineIndex * 7.4), columnWidth, 7.4, { color: [0.11, 0.16, 0.13] })
-            : isFirstColumn
-            ? drawText(line, x + 4, lineStartY - (lineIndex * 7.4), 7.4, { color: [0.11, 0.16, 0.13] })
-            : drawCenteredText(line, x, lineStartY - (lineIndex * 7.4), columnWidth, 7.4, { color: [0.11, 0.16, 0.13] })
-          commands.push(textCommand)
-        })
-        cellX += columnWidth
-      })
-      y -= rowHeight
-    })
-  }
-
-  if (isLastPage && report.totals?.length > 0) {
+  if (!pagePlan.trailerOnlyPage) {
+    commands.push(drawText(report.tableTitle || 'Detailed Records', margin, y, 11, { bold: true, color: [0.19, 0.37, 0.28] }))
     y -= 18
-    y = drawPdfTotals(commands, report.totals, y)
+
+    const headerHeight = 18
+
+    commands.push(drawRect(margin, y - headerHeight, usableWidth, headerHeight, [0.27, 0.45, 0.21], [0.21, 0.35, 0.16]))
+    let headerX = margin
+    tableColumns.forEach((column, index) => {
+      const x = headerX
+      const columnWidth = columnWidths[index]
+      if (index > 0) commands.push(drawRect(x, y - headerHeight, 0.4, headerHeight, null, [0.75, 0.83, 0.72]))
+      wrapPdfText(column.label, estimateMaxChars(columnWidth, HEADER_CELL_CHAR_WIDTH, 6), 2).forEach((line, lineIndex) => {
+        commands.push(drawCenteredText(line, x, y - 8 - (lineIndex * 7), columnWidth, 7, { bold: true, color: [1, 1, 1] }))
+      })
+      headerX += columnWidth
+    })
+    y -= headerHeight
+
+    if (pagePlan.rowPlans.length === 0) {
+      commands.push(drawRect(margin, y - 42, usableWidth, 42, [1, 1, 1], [0.8, 0.85, 0.75]))
+      commands.push(drawText('No records available for this report.', margin + 10, y - 25, 10, { color: [0.4, 0.46, 0.38] }))
+    } else {
+      pagePlan.rowPlans.forEach((plan, rowIndex) => {
+        const rowHeight = plan.height
+        const fill = (startRowIndex + rowIndex) % 2 === 1 ? [0.97, 0.98, 0.95] : [1, 1, 1]
+        commands.push(drawRect(margin, y - rowHeight, usableWidth, rowHeight, fill, [0.78, 0.82, 0.75]))
+        let cellX = margin
+        tableColumns.forEach((column, index) => {
+          const x = cellX
+          const columnWidth = columnWidths[index]
+          if (index > 0) commands.push(drawRect(x, y - rowHeight, 0.25, rowHeight, null, [0.82, 0.86, 0.79]))
+          const cellLines = plan.cellLines[index]
+          const lineStartY = y - 9 - Math.max(0, (plan.maxLines - cellLines.length) * 3.7)
+          cellLines.forEach((line, lineIndex) => {
+            const isFirstColumn = index === 0
+            const shouldCenter = column.align === 'center'
+            const textCommand = shouldCenter
+              ? drawCenteredText(line, x, lineStartY - (lineIndex * 7.4), columnWidth, 7.4, { color: [0.11, 0.16, 0.13] })
+              : isFirstColumn
+              ? drawText(line, x + 4, lineStartY - (lineIndex * 7.4), 7.4, { color: [0.11, 0.16, 0.13] })
+              : drawCenteredText(line, x, lineStartY - (lineIndex * 7.4), columnWidth, 7.4, { color: [0.11, 0.16, 0.13] })
+            commands.push(textCommand)
+          })
+          cellX += columnWidth
+        })
+        y -= rowHeight
+      })
+    }
   }
 
-  if (isLastPage && report.closingText) {
-    y -= 4
-    y = drawPdfLetterText(commands, report.closingText, y)
-  }
+  if (pagePlan.hasTrailer) {
+    if (report.totals?.length > 0) {
+      y -= 18
+      y = drawPdfTotals(commands, report.totals, y)
+    }
 
-  if (isLastPage && report.signatures?.length > 0) {
-    y -= report.reportVariant === 'letter' ? 34 : 8
-    drawPdfSignatures(commands, report.signatures, y)
+    if (report.closingText) {
+      y -= 4
+      y = drawPdfLetterText(commands, report.closingText, y)
+    }
+
+    if (report.signatures?.length > 0) {
+      y -= report.reportVariant === 'letter' ? 34 : 8
+      drawPdfSignatures(commands, report.signatures, y)
+    }
   }
 
   drawPdfFooter(commands)
@@ -884,32 +1017,21 @@ const createPdf = (pageContents) => {
 }
 
 export const downloadPdfReport = (report) => {
-  const rows = report.rows || []
-  const hasTopCards = Boolean(report.summary?.length || report.subtitle)
-  const isLetterReport = Boolean(report.introText || report.closingText || report.signatures?.length)
-  const firstPageCapacity = isLetterReport ? 8 : (hasTopCards ? 12 : 17)
-  const nextPageCapacity = 17
-  const rowPages = chunkRowsForPdf(rows, firstPageCapacity, nextPageCapacity)
+  const width = 842
+  const margin = 28
+  const usableWidth = width - (margin * 2)
+  const tableColumns = report.columns?.length ? report.columns : [{ label: 'Record', value: row => JSON.stringify(row), width: 1 }]
+  const columnWidths = getPdfColumnWidths(tableColumns, usableWidth)
+  const rowPlans = (report.rows || []).map(row => measureRowPlan(row, tableColumns, columnWidths))
+  const pages = planPdfPages(report, rowPlans)
+  const pageCount = pages.length
 
-  if ((report.totals?.length || isLetterReport) && rowPages.length > 0) {
-    const totalsSafeRowLimit = isLetterReport
-      ? 5
-      : Math.max(5, Math.min(12, 13 - Math.ceil(report.totals.length / 2)))
-    while (rowPages[rowPages.length - 1].length > totalsSafeRowLimit) {
-      const overflow = rowPages[rowPages.length - 1].splice(totalsSafeRowLimit)
-      rowPages.push(overflow)
-    }
-  }
-
-  const pageCount = rowPages.length
-  const pageContents = rowPages.map((pageRows, index) => buildPdfPageContent(
-    report,
-    pageRows,
-    index,
-    pageCount,
-    index === 0 ? 0 : firstPageCapacity + ((index - 1) * nextPageCapacity),
-    index === rowPages.length - 1
-  ))
+  let startRowIndex = 0
+  const pageContents = pages.map((pagePlan, index) => {
+    const content = buildPdfPageContent(report, tableColumns, columnWidths, pagePlan, index, pageCount, startRowIndex)
+    startRowIndex += pagePlan.rowPlans.length
+    return content
+  })
 
   downloadBlob(createPdf(pageContents), `${report.filename || 'report'}-${timestamp()}.pdf`)
   return true

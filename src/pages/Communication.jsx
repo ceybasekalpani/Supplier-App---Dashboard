@@ -166,6 +166,8 @@ export default function Communication() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [deletingKey, setDeletingKey] = useState('')
+  const [selectedNewsIds, setSelectedNewsIds] = useState([])
+  const [selectedNotifIds, setSelectedNotifIds] = useState([])
   const [refreshKey, setRefreshKey] = useState(0)
   const [toast, setToast] = useState(null)
   const [routeOptions, setRouteOptions] = useState([])
@@ -182,6 +184,34 @@ export default function Communication() {
   const canCreateNotif = hasAdminPermission(currentAdmin, ['notifications.create'])
   const canUpdateNotif = hasAdminPermission(currentAdmin, ['notifications.update'])
   const canDeleteNotif = hasAdminPermission(currentAdmin, ['notifications.delete'])
+
+  const isNewsDeletable = (item) => canDeleteNews && isWithinDeleteWindow(item)
+  const isNotifDeletable = (item) => canDeleteNotif && isWithinDeleteWindow(item)
+
+  const deletableNews = filteredNews.filter(isNewsDeletable)
+  const deletableNotifications = filteredNotifications.filter(isNotifDeletable)
+  const allNewsSelected = deletableNews.length > 0 && deletableNews.every(item => selectedNewsIds.includes(item.id))
+  const allNotifsSelected = deletableNotifications.length > 0 && deletableNotifications.every(item => selectedNotifIds.includes(item.id))
+
+  const toggleNewsSelection = (id) => {
+    setSelectedNewsIds(previous => (
+      previous.includes(id) ? previous.filter(itemId => itemId !== id) : [...previous, id]
+    ))
+  }
+
+  const toggleNotifSelection = (id) => {
+    setSelectedNotifIds(previous => (
+      previous.includes(id) ? previous.filter(itemId => itemId !== id) : [...previous, id]
+    ))
+  }
+
+  const toggleSelectAllNews = () => {
+    setSelectedNewsIds(allNewsSelected ? [] : deletableNews.map(item => item.id))
+  }
+
+  const toggleSelectAllNotifs = () => {
+    setSelectedNotifIds(allNotifsSelected ? [] : deletableNotifications.map(item => item.id))
+  }
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type })
@@ -279,6 +309,8 @@ export default function Communication() {
   const handleTabChange = (nextTab) => {
     setTab(nextTab)
     handleDiscard()
+    setSelectedNewsIds([])
+    setSelectedNotifIds([])
   }
 
   const refreshCommunications = () => {
@@ -428,6 +460,28 @@ export default function Communication() {
     }
   }
 
+  const handleBulkDeleteNews = async () => {
+    if (selectedNewsIds.length === 0) return
+
+    if (!window.confirm(`Delete ${selectedNewsIds.length} selected news item(s)? This cannot be undone.`)) return
+
+    setDeletingKey('news-bulk')
+
+    const results = await Promise.allSettled(selectedNewsIds.map(id => communicationsApi.deleteNews(id)))
+    const deletedIds = selectedNewsIds.filter((id, index) => results[index].status === 'fulfilled')
+    const failedCount = results.length - deletedIds.length
+
+    setNewsItems(prev => prev.filter(item => !deletedIds.includes(item.id)))
+    setSelectedNewsIds([])
+    setDeletingKey('')
+
+    if (failedCount > 0) {
+      showToast(`Deleted ${deletedIds.length} news item(s), ${failedCount} failed.`, deletedIds.length ? 'success' : 'error')
+    } else {
+      showToast(`Deleted ${deletedIds.length} news item(s) successfully.`)
+    }
+  }
+
   const handleSendNotification = async () => {
     if (saving) return
 
@@ -556,6 +610,28 @@ export default function Communication() {
     }
   }
 
+  const handleBulkDeleteNotifications = async () => {
+    if (selectedNotifIds.length === 0) return
+
+    if (!window.confirm(`Delete ${selectedNotifIds.length} selected notification(s)? This cannot be undone.`)) return
+
+    setDeletingKey('notification-bulk')
+
+    const results = await Promise.allSettled(selectedNotifIds.map(id => communicationsApi.deleteNotification(id)))
+    const deletedIds = selectedNotifIds.filter((id, index) => results[index].status === 'fulfilled')
+    const failedCount = results.length - deletedIds.length
+
+    setNotifications(prev => prev.filter(item => !deletedIds.includes(item.id)))
+    setSelectedNotifIds([])
+    setDeletingKey('')
+
+    if (failedCount > 0) {
+      showToast(`Deleted ${deletedIds.length} notification(s), ${failedCount} failed.`, deletedIds.length ? 'success' : 'error')
+    } else {
+      showToast(`Deleted ${deletedIds.length} notification(s) successfully.`)
+    }
+  }
+
   return (
     <div className="space-y-5">
       {toast && (
@@ -613,13 +689,32 @@ export default function Communication() {
               <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
               Refresh
             </button>
+            {(tab === 'news' ? selectedNewsIds.length : selectedNotifIds.length) > 0 && (
+              <button
+                type="button"
+                onClick={tab === 'news' ? handleBulkDeleteNews : handleBulkDeleteNotifications}
+                disabled={deletingKey === 'news-bulk' || deletingKey === 'notification-bulk'}
+                className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-600 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300"
+              >
+                {(deletingKey === 'news-bulk' || deletingKey === 'notification-bulk') ? <RefreshCw size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                Delete Selected ({tab === 'news' ? selectedNewsIds.length : selectedNotifIds.length})
+              </button>
+            )}
             {(tab === 'news' ? newsFilters : notificationFilters).map(filter => (
               <FilterButton
                 key={filter}
                 filter={filter}
                 activeFilter={tab === 'news' ? newsFilter : notifFilter}
                 count={countStatus(tab === 'news' ? newsItems : notifications, filter)}
-                onClick={() => tab === 'news' ? setNewsFilter(filter) : setNotifFilter(filter)}
+                onClick={() => {
+                  if (tab === 'news') {
+                    setNewsFilter(filter)
+                    setSelectedNewsIds([])
+                  } else {
+                    setNotifFilter(filter)
+                    setSelectedNotifIds([])
+                  }
+                }}
               />
             ))}
           </div>
@@ -644,6 +739,16 @@ export default function Communication() {
                 <table className="w-full min-w-[820px] text-sm">
                   <thead className="border-y border-slate-200 bg-white text-xs uppercase text-slate-400 dark:border-slate-700 dark:bg-slate-800">
                     <tr>
+                      <th className="w-10 px-4 py-3 text-left font-semibold">
+                        <input
+                          type="checkbox"
+                          checked={allNewsSelected}
+                          disabled={deletableNews.length === 0}
+                          onChange={toggleSelectAllNews}
+                          className="h-4 w-4 rounded border-slate-300 text-red-600 focus:ring-red-500 disabled:cursor-not-allowed disabled:opacity-40"
+                          title="Select all deletable news"
+                        />
+                      </th>
                       <th className="px-4 py-3 text-left font-semibold">Title</th>
                       <th className="px-4 py-3 text-left font-semibold">Message</th>
                       <th className="px-4 py-3 text-left font-semibold">Created</th>
@@ -655,6 +760,15 @@ export default function Communication() {
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                     {filteredNews.map(item => (
                       <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                        <td className="px-4 py-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedNewsIds.includes(item.id)}
+                            disabled={!isNewsDeletable(item)}
+                            onChange={() => toggleNewsSelection(item.id)}
+                            className="h-4 w-4 rounded border-slate-300 text-red-600 focus:ring-red-500 disabled:cursor-not-allowed disabled:opacity-40"
+                          />
+                        </td>
                         <td className="px-4 py-3">
                           <p className="font-semibold text-slate-800 dark:text-slate-200">{item.title}</p>
                           <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
@@ -696,7 +810,7 @@ export default function Communication() {
                     ))}
                     {filteredNews.length === 0 && (
                       <tr>
-                        <td colSpan="6">
+                        <td colSpan="7">
                           <EmptyState icon={Newspaper} title="No news found" description="Try another status filter or create a new news item." />
                         </td>
                       </tr>
@@ -709,6 +823,16 @@ export default function Communication() {
                 <table className="w-full min-w-[760px] text-sm">
                   <thead className="border-y border-slate-200 bg-white text-xs uppercase text-slate-400 dark:border-slate-700 dark:bg-slate-800">
                     <tr>
+                      <th className="w-10 px-4 py-3 text-left font-semibold">
+                        <input
+                          type="checkbox"
+                          checked={allNotifsSelected}
+                          disabled={deletableNotifications.length === 0}
+                          onChange={toggleSelectAllNotifs}
+                          className="h-4 w-4 rounded border-slate-300 text-red-600 focus:ring-red-500 disabled:cursor-not-allowed disabled:opacity-40"
+                          title="Select all deletable notifications"
+                        />
+                      </th>
                       <th className="px-4 py-3 text-left font-semibold">Title</th>
                       <th className="px-4 py-3 text-left font-semibold">Message</th>
                       <th className="px-4 py-3 text-left font-semibold">Status</th>
@@ -719,6 +843,15 @@ export default function Communication() {
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                     {filteredNotifications.map(item => (
                       <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                        <td className="px-4 py-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedNotifIds.includes(item.id)}
+                            disabled={!isNotifDeletable(item)}
+                            onChange={() => toggleNotifSelection(item.id)}
+                            className="h-4 w-4 rounded border-slate-300 text-red-600 focus:ring-red-500 disabled:cursor-not-allowed disabled:opacity-40"
+                          />
+                        </td>
                         <td className="px-4 py-3">
                           <p className="font-semibold text-slate-800 dark:text-slate-200">{item.title}</p>
                           <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
@@ -755,7 +888,7 @@ export default function Communication() {
                     ))}
                     {filteredNotifications.length === 0 && (
                       <tr>
-                        <td colSpan="5">
+                        <td colSpan="6">
                           <EmptyState icon={Bell} title="No notifications found" description="Try another status filter or send a new notification." />
                         </td>
                       </tr>
