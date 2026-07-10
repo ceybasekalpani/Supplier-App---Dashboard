@@ -440,10 +440,13 @@ function RequestTableSummary({ rows, tab }) {
 }
 
 function SupplierWindow({ regNo, tab, requestsByType, salaryDate, onClose }) {
+  const salaryFrom = salaryDate || new Date().toISOString().slice(0, 10)
   const fallbackSupplier = mockSuppliers.find(supplier => supplier.regNo === regNo)
   const [supplier, setSupplier] = useState(fallbackSupplier || null)
   const [supplierLoading, setSupplierLoading] = useState(false)
   const [summaryStatus, setSummaryStatus] = useState('all')
+  const [realAdvanceLimit, setRealAdvanceLimit] = useState(null)
+  const [advanceLimitLoading, setAdvanceLimitLoading] = useState(tab === 'advance')
 
   useEffect(() => {
     let mounted = true
@@ -473,6 +476,29 @@ function SupplierWindow({ regNo, tab, requestsByType, salaryDate, onClose }) {
     }
   }, [fallbackSupplier, regNo])
 
+  useEffect(() => {
+    if (tab !== 'advance') return
+
+    let mounted = true
+    setAdvanceLimitLoading(true)
+
+    dashboardRequestsApi
+      .getAdvanceLimit(regNo, salaryFrom)
+      .then(result => {
+        if (mounted) setRealAdvanceLimit(result)
+      })
+      .catch(() => {
+        if (mounted) setRealAdvanceLimit(null)
+      })
+      .finally(() => {
+        if (mounted) setAdvanceLimitLoading(false)
+      })
+
+    return () => {
+      mounted = false
+    }
+  }, [regNo, tab, salaryFrom])
+
   if (!supplier && supplierLoading) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
@@ -485,7 +511,6 @@ function SupplierWindow({ regNo, tab, requestsByType, salaryDate, onClose }) {
 
   if (!supplier) return null
 
-  const salaryFrom = salaryDate || new Date().toISOString().slice(0, 10)
   const limit = calculateAdvanceLimit(regNo, salaryFrom)
   const isAdvanceView = tab === 'advance'
   const leafNetWeight = limit.superNet + limit.normalNet
@@ -661,7 +686,9 @@ function SupplierWindow({ regNo, tab, requestsByType, salaryDate, onClose }) {
                   {isAdvanceView ? (
                     <>
                       <p className="mt-2 text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Maximum advance limit</p>
-                      <p className="mt-0.5 text-xl font-bold text-emerald-800 dark:text-emerald-200">{currency(limit.total)}</p>
+                      <p className="mt-0.5 text-xl font-bold text-emerald-800 dark:text-emerald-200">
+                        {advanceLimitLoading ? '...' : currency(realAdvanceLimit)}
+                      </p>
                       <p className="mt-1 text-xs font-semibold text-slate-600 dark:text-slate-300">{salaryFrom} to {limit.cycleEnd || '-'}</p>
                     </>
                   ) : (
@@ -776,6 +803,9 @@ function SidePanel({
   canReject,
   canApproveRejected,
   canRejectApproved,
+  exceedsAdvanceLimit,
+  advanceLimit,
+  advanceLimitLoading,
   onDraftChange,
   onApprove,
   onReject,
@@ -802,6 +832,7 @@ function SidePanel({
       ? canRejectApproved
       : false
   const canShowActions = canApproveRequest || canRejectRequest
+  const blockApproveForLimit = canApproveRequest && exceedsAdvanceLimit
 
   return (
     <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-4 space-y-4 shadow-sm sticky top-4">
@@ -862,6 +893,23 @@ function SidePanel({
         </div>
       )}
 
+      {advanceLimitLoading && req.status === 'pending' && (
+        <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-700/40 dark:text-slate-400">
+          <RefreshCw size={13} className="animate-spin" />
+          Checking maximum advance limit...
+        </div>
+      )}
+
+      {blockApproveForLimit && (
+        <div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-3 text-xs text-red-700 dark:border-red-900/50 dark:bg-red-900/15 dark:text-red-300">
+          <X size={14} className="mt-0.5 shrink-0" />
+          <p>
+            Requested amount ({currency(req.amount)}) exceeds this supplier&apos;s maximum advance limit of{' '}
+            <strong className="font-semibold">{currency(advanceLimit)}</strong>. This request cannot be approved.
+          </p>
+        </div>
+      )}
+
       <div>
         <label className="block">
           <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide block mb-1.5">Remarks</span>
@@ -890,8 +938,9 @@ function SidePanel({
 
           <button
             type="button"
-            disabled={statusSaving || !canApproveRequest}
+            disabled={statusSaving || !canApproveRequest || blockApproveForLimit}
             onClick={() => onApprove(req.id)}
+            title={blockApproveForLimit ? 'Exceeds maximum advance limit' : undefined}
             className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-md bg-green-700 text-white hover:bg-green-800 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Check size={13} /> Approve
@@ -1052,6 +1101,41 @@ export default function Requests() {
 
     return allData[tab].find(row => `${tab}-${row.id}` === selectedKey) || null
   }, [allData, selectedKey, tab])
+
+  const [selectedAdvanceLimit, setSelectedAdvanceLimit] = useState(null)
+  const [selectedAdvanceLimitLoading, setSelectedAdvanceLimitLoading] = useState(false)
+
+  useEffect(() => {
+    if (tab !== 'advance' || !selected?.regNo) {
+      setSelectedAdvanceLimit(null)
+      return
+    }
+
+    let mounted = true
+    setSelectedAdvanceLimitLoading(true)
+
+    dashboardRequestsApi
+      .getAdvanceLimit(selected.regNo)
+      .then(result => {
+        if (mounted) setSelectedAdvanceLimit(result)
+      })
+      .catch(() => {
+        if (mounted) setSelectedAdvanceLimit(null)
+      })
+      .finally(() => {
+        if (mounted) setSelectedAdvanceLimitLoading(false)
+      })
+
+    return () => {
+      mounted = false
+    }
+  }, [selected?.regNo, tab])
+
+  const exceedsAdvanceLimit = tab === 'advance'
+    && selected
+    && selected.status === 'pending'
+    && selectedAdvanceLimit !== null
+    && Number(selected.amount || 0) > Number(selectedAdvanceLimit)
 
   const filtered = useMemo(() => (
     allData[tab].filter(row => {
@@ -1539,6 +1623,9 @@ export default function Requests() {
             canReject={canRejectCurrentTab}
             canApproveRejected={canApproveRejectedCurrentTab}
             canRejectApproved={canRejectApprovedCurrentTab}
+            exceedsAdvanceLimit={exceedsAdvanceLimit}
+            advanceLimit={selectedAdvanceLimit}
+            advanceLimitLoading={selectedAdvanceLimitLoading}
             onDraftChange={handleDraftChange}
             onApprove={id => updateStatus(id, 'approved')}
             onReject={id => updateStatus(id, 'rejected')}

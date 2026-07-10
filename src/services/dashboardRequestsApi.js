@@ -175,4 +175,23 @@ export const dashboardRequestsApi = {
     )
   },
 
+  async getAdvanceLimit(regNo, salaryDate, { signal } = {}) {
+    const params = new URLSearchParams()
+    if (salaryDate) params.set('salaryDate', salaryDate)
+    const query = params.toString()
+
+    return withMockFallback(
+      async () => {
+        const response = await adminApiRequest(`/api/DashboardRequests/advance-limit/${regNo}${query ? `?${query}` : ''}`, {
+          method: 'GET',
+          signal,
+        })
+
+        const limit = getValue(response, 'limit')
+        return limit === null || limit === undefined ? null : Number(limit)
+      },
+      () => null
+    )
+  },
+
 }
