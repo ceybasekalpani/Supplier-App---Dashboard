@@ -4,9 +4,7 @@ import { adminAuthStorage } from '../services/adminApiClient'
 
 const API_BASE_URL = env.apiBaseUrl || env.API_BASE_URL || ''
 
-// Backend API routes require a Bearer token (see adminApiRequest), but a plain
-// <img src="..."> request cannot attach one. Detect URLs that point at our API
-// so we can fetch them with auth and hand the browser a blob: URL instead.
+
 const isProtectedApiUrl = (url) => {
   if (!url) return false
   const value = String(url)

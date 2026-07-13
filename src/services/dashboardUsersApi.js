@@ -9,18 +9,7 @@ const getValue = (source, camelKey, pascalKey = camelKey[0].toUpperCase() + came
 
 const API_BASE_URL = env.apiBaseUrl || env.API_BASE_URL || ''
 
-// const toProfileImageDisplayUrl = (id, avatar, cacheKey = '') => {
-//   if (!id || !avatar) return avatar || null
-//   const value = String(avatar).trim()
-//   if (/^(data:|blob:)/i.test(value)) return value
-//   if (/^https?:\/\//i.test(value)) {
-//     if (!cacheKey) return value
-//     const separator = value.includes('?') ? '&' : '?'
-//     return `${value}${separator}v=${encodeURIComponent(cacheKey)}`
-//   }
-//   const separator = cacheKey ? `?v=${encodeURIComponent(cacheKey)}` : ''
-//   return `${API_BASE_URL}/api/DashboardUsers/${id}/profile-image${separator}`
-// }
+
 
   const toProfileImageDisplayUrl = (id, avatar, cacheKey = '') => {
   if (!avatar) return null
