@@ -51,14 +51,18 @@ const Settings = () => {
     dashboardPermissionsApi
       .getSettings({ signal: controller.signal })
       .then(result => {
-        setUsers(result.users);
-        setModules(result.modules);
-        setUserPermissions(result.userPermissions);
+        const users = result.users || [];
+        const modules = result.modules || [];
+        const userPermissions = result.userPermissions || {};
 
-        const firstUser = result.users.find(user => user.id === requestedUserId) || result.users[0] || null;
+        setUsers(users);
+        setModules(modules);
+        setUserPermissions(userPermissions);
+
+        const firstUser = users.find(user => user.id === requestedUserId) || users[0] || null;
         setSelectedUser(firstUser);
 
-        const firstPermissions = firstUser ? result.userPermissions[firstUser.id] || emptyPermissions : emptyPermissions;
+        const firstPermissions = firstUser ? userPermissions[firstUser.id] || emptyPermissions : emptyPermissions;
         setModulePermissions({ ...firstPermissions.modulePermissions });
         setSubPermissions({ ...firstPermissions.subPermissions });
         setExpandedModules({});

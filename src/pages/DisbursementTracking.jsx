@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertCircle,
   Banknote,
@@ -22,6 +22,7 @@ import { dashboardRequestsApi } from '../services/dashboardRequestsApi'
 import { downloadDocReport, printReportAsPdf } from '../utils/reports'
 import { hasAdminPermission } from '../services/adminPermissions'
 import { dashboardPermissionsApi } from '../services/dashboardPermissionsApi'
+import { focusNextFieldOnEnter } from '../utils/keyboardNav'
 
 const typeStyles = {
   advance: {
@@ -852,6 +853,7 @@ export default function DisbursementTracking() {
   const [selectedReceiptRows, setSelectedReceiptRows] = useState([])
   const [selectedDetailsLoading, setSelectedDetailsLoading] = useState(false)
   const [currentAdmin, setCurrentAdmin] = useState(() => adminAuthStorage.getUser())
+  const selectBorrowerRequestRef = useRef(0)
 
   const canUpdateTracking = hasAdminPermission(currentAdmin, ['disbursementTracking.update'])
   const canExport = hasAdminPermission(currentAdmin, ['disbursementTracking.export'])
@@ -899,7 +901,7 @@ export default function DisbursementTracking() {
         signal: controller.signal,
       })
       .then(result => {
-        setTrackingRows(result)
+        setTrackingRows(Array.isArray(result) ? result : [])
       })
       .catch(error => {
         if (error.name !== 'AbortError') {
@@ -929,7 +931,7 @@ export default function DisbursementTracking() {
         signal: controller.signal,
       })
       .then(result => {
-        setDeliveryNotes(result)
+        setDeliveryNotes(Array.isArray(result) ? result : [])
       })
       .catch(error => {
         if (error.name !== 'AbortError') {
@@ -1403,6 +1405,8 @@ export default function DisbursementTracking() {
   }
 
   const selectBorrower = async (note) => {
+    const requestId = ++selectBorrowerRequestRef.current
+
     setSelectedNote({ ...note, details: [] })
     setSelectedAssignmentRows([])
     setSelectedApprovalRows([])
@@ -1459,16 +1463,22 @@ export default function DisbursementTracking() {
         notes: details,
       }
 
+      if (requestId !== selectBorrowerRequestRef.current) return
+
       setSelectedNote(selectedGroupNote)
       setSelectedAssignmentRows(assignmentRows.filter(row => isTrackingRowAssignedToNote(row, selectedGroupNote)))
       setSelectedApprovalRows(flattenApprovedRequestRows(approvedRequests))
       setSelectedGroupKey('')
       setSelectedReceiptRows([])
     } catch (error) {
+      if (requestId !== selectBorrowerRequestRef.current) return
+
       setShowError(error.message || 'Unable to load selected borrower details')
       setTimeout(() => setShowError(null), 3000)
     } finally {
-      setSelectedDetailsLoading(false)
+      if (requestId === selectBorrowerRequestRef.current) {
+        setSelectedDetailsLoading(false)
+      }
     }
   }
 
@@ -1702,7 +1712,7 @@ export default function DisbursementTracking() {
       </div>
 
       <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3" onKeyDown={focusNextFieldOnEnter}>
           <div className="relative min-w-[220px] flex-1">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input

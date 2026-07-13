@@ -1,7 +1,4 @@
-import { env } from '../config/env'
-import { permissionCatalog, roleModulePermissionDefaults, roleSubPermissionDefaults, systemUsers } from '../data/mockData'
 import { adminApiRequest } from './adminApiClient'
-import { shouldUseApi } from './apiClient'
 
 const getValue = (source, camelKey, pascalKey = camelKey[0].toUpperCase() + camelKey.slice(1)) => (
   source?.[camelKey] ?? source?.[pascalKey]
@@ -55,90 +52,34 @@ const normalizeSettings = (response = {}) => {
   }
 }
 
-const buildMockModules = () => (
-  Object.entries(permissionCatalog).map(([id, subPermissions]) => ({
-    id,
-    label: id.replace(/([A-Z])/g, ' $1').replace(/^./, char => char.toUpperCase()),
-    description: '',
-    subPermissions,
-  }))
-)
-
-const buildMockSettings = () => {
-  const users = systemUsers.map(normalizeUser)
-  const userPermissions = systemUsers.reduce((acc, user) => {
-    const role = user.role || 'Viewer'
-    acc[Number(user.id)] = {
-      modulePermissions: roleModulePermissionDefaults[role] || roleModulePermissionDefaults.Viewer,
-      subPermissions: roleSubPermissionDefaults[role] || roleSubPermissionDefaults.Viewer,
-    }
-    return acc
-  }, {})
-
-  return {
-    users,
-    modules: buildMockModules(),
-    userPermissions,
-  }
-}
-
-const withMockFallback = async (request, mockFactory) => {
-  if (!shouldUseApi()) return mockFactory()
-
-  try {
-    return await request()
-  } catch (error) {
-    if (error.name === 'AbortError' || !env.enableMockData) throw error
-    return mockFactory()
-  }
-}
-
 export const dashboardPermissionsApi = {
   async getSettings({ signal } = {}) {
-    return withMockFallback(
-      async () => {
-        const response = await adminApiRequest('/api/DashboardPermissions', {
-          method: 'GET',
-          signal,
-        })
+    const response = await adminApiRequest('/api/DashboardPermissions', {
+      method: 'GET',
+      signal,
+    })
 
-        return normalizeSettings(response)
-      },
-      buildMockSettings
-    )
+    return normalizeSettings(response)
   },
 
   async getUserPermissions(adminId, { signal } = {}) {
-    return withMockFallback(
-      async () => {
-        const response = await adminApiRequest(`/api/DashboardPermissions/${adminId}`, {
-          method: 'GET',
-          signal,
-        })
+    const response = await adminApiRequest(`/api/DashboardPermissions/${adminId}`, {
+      method: 'GET',
+      signal,
+    })
 
-        return normalizePermissions(response)
-      },
-      () => buildMockSettings().userPermissions[Number(adminId)] || {
-        modulePermissions: {},
-        subPermissions: {},
-      }
-    )
+    return normalizePermissions(response)
   },
 
   async saveUserPermissions(adminId, permissions) {
-    return withMockFallback(
-      async () => {
-        const response = await adminApiRequest(`/api/DashboardPermissions/${adminId}`, {
-          method: 'PUT',
-          body: JSON.stringify({
-            modulePermissions: permissions.modulePermissions || {},
-            subPermissions: permissions.subPermissions || {},
-          }),
-        })
+    const response = await adminApiRequest(`/api/DashboardPermissions/${adminId}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        modulePermissions: permissions.modulePermissions || {},
+        subPermissions: permissions.subPermissions || {},
+      }),
+    })
 
-        return normalizePermissions(response)
-      },
-      () => normalizePermissions(permissions)
-    )
+    return normalizePermissions(response)
   },
 }

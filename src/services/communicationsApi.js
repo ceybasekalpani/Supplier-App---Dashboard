@@ -1,7 +1,4 @@
-import { env } from '../config/env'
-import { newsItems, notifications } from '../data/mockData'
 import { adminApiRequest } from './adminApiClient'
-import { shouldUseApi } from './apiClient'
 
 const getValue = (source, camelKey, pascalKey = camelKey[0].toUpperCase() + camelKey.slice(1)) => (
   source?.[camelKey] ?? source?.[pascalKey]
@@ -111,43 +108,14 @@ const buildNotificationPayload = ({ title, message, schedule, type, audienceType
   targetRoute: audienceType === 'Route' ? String(targetRoute || '').trim() || null : null,
 })
 
-const mockDashboard = () => ({
-  news: newsItems.map(row => normalizeNews({
-    ...row,
-    isActive: row.status === 'active',
-    content: row.description,
-  })),
-  notifications: notifications.map(row => normalizeNotification({
-    ...row,
-    isActive: row.status === 'active' || row.status === 'delivered',
-    type: row.type || 'General',
-  })),
-})
-
-const withMockFallback = async (request, mockFactory) => {
-  if (!shouldUseApi()) return mockFactory()
-
-  try {
-    return await request()
-  } catch (error) {
-    if (error.name === 'AbortError' || !env.enableMockData) throw error
-    return mockFactory()
-  }
-}
-
 export const communicationsApi = {
   async getAll({ signal } = {}) {
-    return withMockFallback(
-      async () => {
-        const response = await adminApiRequest('/api/Communications', {
-          method: 'GET',
-          signal,
-        })
+    const response = await adminApiRequest('/api/Communications', {
+      method: 'GET',
+      signal,
+    })
 
-        return normalizeDashboard(response)
-      },
-      mockDashboard
-    )
+    return normalizeDashboard(response)
   },
 
   async getNews({ status = '', signal } = {}) {
@@ -155,65 +123,36 @@ export const communicationsApi = {
     if (status && status !== 'all') params.set('status', status)
     const query = params.toString()
 
-    return withMockFallback(
-      async () => {
-        const response = await adminApiRequest(`/api/Communications/news${query ? `?${query}` : ''}`, {
-          method: 'GET',
-          signal,
-        })
+    const response = await adminApiRequest(`/api/Communications/news${query ? `?${query}` : ''}`, {
+      method: 'GET',
+      signal,
+    })
 
-        return (response || []).map(normalizeNews)
-      },
-      () => mockDashboard().news.filter(item => !status || status === 'all' || item.status === status)
-    )
+    return (response || []).map(normalizeNews)
   },
 
   async createNews(form) {
-    return withMockFallback(
-      async () => {
-        const response = await adminApiRequest('/api/Communications/news', {
-          method: 'POST',
-          body: JSON.stringify(buildNewsPayload(form)),
-        })
+    const response = await adminApiRequest('/api/Communications/news', {
+      method: 'POST',
+      body: JSON.stringify(buildNewsPayload(form)),
+    })
 
-        return normalizeNews(response)
-      },
-      () => normalizeNews({
-        ...form,
-        id: Date.now(),
-        description: form.description,
-        created: new Date().toISOString(),
-        isActive: form.active,
-      })
-    )
+    return normalizeNews(response)
   },
 
   async updateNews(id, form) {
-    return withMockFallback(
-      async () => {
-        const response = await adminApiRequest(`/api/Communications/news/${id}`, {
-          method: 'PUT',
-          body: JSON.stringify(buildNewsPayload(form)),
-        })
+    const response = await adminApiRequest(`/api/Communications/news/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(buildNewsPayload(form)),
+    })
 
-        return normalizeNews(response)
-      },
-      () => normalizeNews({
-        ...form,
-        id,
-        description: form.description,
-        isActive: form.active,
-      })
-    )
+    return normalizeNews(response)
   },
 
   async deleteNews(id) {
-    return withMockFallback(
-      () => adminApiRequest(`/api/Communications/news/${id}`, {
-        method: 'DELETE',
-      }),
-      () => null
-    )
+    return adminApiRequest(`/api/Communications/news/${id}`, {
+      method: 'DELETE',
+    })
   },
 
   async getNotifications({ status = '', signal } = {}) {
@@ -221,61 +160,35 @@ export const communicationsApi = {
     if (status && status !== 'all') params.set('status', status)
     const query = params.toString()
 
-    return withMockFallback(
-      async () => {
-        const response = await adminApiRequest(`/api/Communications/notifications${query ? `?${query}` : ''}`, {
-          method: 'GET',
-          signal,
-        })
+    const response = await adminApiRequest(`/api/Communications/notifications${query ? `?${query}` : ''}`, {
+      method: 'GET',
+      signal,
+    })
 
-        return (response || []).map(normalizeNotification)
-      },
-      () => mockDashboard().notifications.filter(item => !status || status === 'all' || item.status === status)
-    )
+    return (response || []).map(normalizeNotification)
   },
 
   async createNotification(form) {
-    return withMockFallback(
-      async () => {
-        const response = await adminApiRequest('/api/Communications/notifications', {
-          method: 'POST',
-          body: JSON.stringify(buildNotificationPayload(form)),
-        })
+    const response = await adminApiRequest('/api/Communications/notifications', {
+      method: 'POST',
+      body: JSON.stringify(buildNotificationPayload(form)),
+    })
 
-        return normalizeNotification(response)
-      },
-      () => normalizeNotification({
-        ...form,
-        id: Date.now(),
-        isActive: true,
-      })
-    )
+    return normalizeNotification(response)
   },
 
   async updateNotification(id, form) {
-    return withMockFallback(
-      async () => {
-        const response = await adminApiRequest(`/api/Communications/notifications/${id}`, {
-          method: 'PUT',
-          body: JSON.stringify(buildNotificationPayload(form)),
-        })
+    const response = await adminApiRequest(`/api/Communications/notifications/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(buildNotificationPayload(form)),
+    })
 
-        return normalizeNotification(response)
-      },
-      () => normalizeNotification({
-        ...form,
-        id,
-        isActive: true,
-      })
-    )
+    return normalizeNotification(response)
   },
 
   async deleteNotification(id) {
-    return withMockFallback(
-      () => adminApiRequest(`/api/Communications/notifications/${id}`, {
-        method: 'DELETE',
-      }),
-      () => null
-    )
+    return adminApiRequest(`/api/Communications/notifications/${id}`, {
+      method: 'DELETE',
+    })
   },
 }

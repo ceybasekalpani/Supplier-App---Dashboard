@@ -1,7 +1,4 @@
-import { env } from '../config/env'
-import { advanceRequests, fertilizerRequests, itemRequests } from '../data/mockData'
 import { adminApiRequest } from './adminApiClient'
-import { shouldUseApi } from './apiClient'
 
 const getValue = (source, camelKey, pascalKey = camelKey[0].toUpperCase() + camelKey.slice(1)) => (
   source?.[camelKey] ?? source?.[pascalKey]
@@ -55,68 +52,6 @@ const normalizeRequestType = (requestType) => {
   return type
 }
 
-const buildMockResponse = ({ status = '', search = '', fromDate = '', toDate = '' } = {}) => {
-  const term = String(search || '').trim().toLowerCase()
-  const activeStatus = String(status || '').trim().toLowerCase()
-
-  const filterRows = rows => rows
-    .filter(row => !activeStatus || activeStatus === 'all' || normalizeStatus(row.status) === activeStatus)
-    .filter(row => (
-      !term ||
-      String(row.regNo || '').toLowerCase().includes(term) ||
-      String(row.name || '').toLowerCase().includes(term) ||
-      String(row.type || row.paymentType || '').toLowerCase().includes(term)
-    ))
-    .filter(row => {
-      const rowDate = String(row.date || '').slice(0, 10)
-      if (fromDate && rowDate < fromDate) return false
-      if (toDate && rowDate > toDate) return false
-      return true
-    })
-
-  const advance = filterRows(advanceRequests).map(row => normalizeRequestRow({
-    ...row,
-    requestNo: row.requestNo || `ADV-${String(row.id).padStart(4, '0')}`,
-    type: row.paymentType || 'Advance',
-  }))
-  const fertilizer = filterRows(fertilizerRequests).map(row => normalizeRequestRow({
-    ...row,
-    requestNo: row.requestNo || `FER-${String(row.id).padStart(4, '0')}`,
-  }))
-  const items = filterRows(itemRequests).map(row => normalizeRequestRow({
-    ...row,
-    requestNo: row.requestNo || `ITM-${String(row.id).padStart(4, '0')}`,
-  }))
-  const supplierCount = new Set([...advance, ...fertilizer, ...items].map(row => row.regNo)).size
-
-  return {
-    advance,
-    fertilizer,
-    items,
-    totals: {
-      advanceCount: advance.length,
-      fertilizerCount: fertilizer.length,
-      itemCount: items.length,
-      supplierCount,
-      totalCount: advance.length + fertilizer.length + items.length,
-      totalAdvanceAmount: advance.reduce((sum, row) => sum + Number(row.amount || 0), 0),
-      totalFertilizerQuantity: fertilizer.reduce((sum, row) => sum + Number(row.qty || 0), 0),
-      totalItemQuantity: items.reduce((sum, row) => sum + Number(row.qty || 0), 0),
-    },
-  }
-}
-
-const withMockFallback = async (request, mockFactory) => {
-  if (!shouldUseApi()) return mockFactory()
-
-  try {
-    return await request()
-  } catch (error) {
-    if (error.name === 'AbortError' || !env.enableMockData) throw error
-    return mockFactory()
-  }
-}
-
 export const dashboardRequestsApi = {
   async list({ status = '', search = '', fromDate = '', toDate = '', signal } = {}) {
     const params = new URLSearchParams()
@@ -128,51 +63,26 @@ export const dashboardRequestsApi = {
 
     const query = params.toString()
 
-    return withMockFallback(
-      async () => {
-        const response = await adminApiRequest(`/api/DashboardRequests${query ? `?${query}` : ''}`, {
-          method: 'GET',
-          signal,
-        })
+    const response = await adminApiRequest(`/api/DashboardRequests${query ? `?${query}` : ''}`, {
+      method: 'GET',
+      signal,
+    })
 
-        return normalizeResponse(response)
-      },
-      () => buildMockResponse({ status, search, fromDate, toDate })
-    )
+    return normalizeResponse(response)
   },
 
   async updateStatus({ requestType, id, status, remarks = '' }) {
     const normalizedType = normalizeRequestType(requestType)
 
-    return withMockFallback(
-      async () => {
-        const response = await adminApiRequest(`/api/DashboardRequests/${normalizedType}/${id}/status`, {
-          method: 'PUT',
-          body: JSON.stringify({
-            status,
-            remarks,
-          }),
-        })
+    const response = await adminApiRequest(`/api/DashboardRequests/${normalizedType}/${id}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        status,
+        remarks,
+      }),
+    })
 
-        return normalizeRequestRow(response)
-      },
-      () => {
-        const source = normalizedType === 'advance'
-          ? advanceRequests
-          : normalizedType === 'fertilizer'
-            ? fertilizerRequests
-            : itemRequests
-        const row = source.find(item => Number(item.id) === Number(id)) || { id }
-
-        return normalizeRequestRow({
-          ...row,
-          requestNo: row.requestNo || `${normalizedType.toUpperCase()}-${String(id).padStart(4, '0')}`,
-          status,
-          remarks,
-          checkedBy: 'Local Admin',
-        })
-      }
-    )
+    return normalizeRequestRow(response)
   },
 
   async getAdvanceLimit(regNo, salaryDate, { signal } = {}) {
@@ -180,18 +90,13 @@ export const dashboardRequestsApi = {
     if (salaryDate) params.set('salaryDate', salaryDate)
     const query = params.toString()
 
-    return withMockFallback(
-      async () => {
-        const response = await adminApiRequest(`/api/DashboardRequests/advance-limit/${regNo}${query ? `?${query}` : ''}`, {
-          method: 'GET',
-          signal,
-        })
+    const response = await adminApiRequest(`/api/DashboardRequests/advance-limit/${regNo}${query ? `?${query}` : ''}`, {
+      method: 'GET',
+      signal,
+    })
 
-        const limit = getValue(response, 'limit')
-        return limit === null || limit === undefined ? null : Number(limit)
-      },
-      () => null
-    )
+    const limit = getValue(response, 'limit')
+    return limit === null || limit === undefined ? null : Number(limit)
   },
 
 }

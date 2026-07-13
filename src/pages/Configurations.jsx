@@ -205,8 +205,8 @@ export default function Configurations() {
     fertilizerItemConfigurationsApi
       .list({ includeInactive: true, signal: controller.signal })
       .then(result => {
-        setFertilizerList(result.fertilizer)
-        setItemList(result.items)
+        setFertilizerList(result.fertilizer || [])
+        setItemList(result.items || [])
       })
       .catch(error => {
         if (error.name !== 'AbortError') {

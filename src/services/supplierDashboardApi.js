@@ -1,7 +1,4 @@
-import { env } from '../config/env'
-import { advanceRequests, fertilizerRequests, itemRequests, suppliers } from '../data/mockData'
 import { adminApiRequest } from './adminApiClient'
-import { shouldUseApi } from './apiClient'
 
 const getValue = (source, camelKey, pascalKey = camelKey[0].toUpperCase() + camelKey.slice(1)) => (
   source?.[camelKey] ?? source?.[pascalKey]
@@ -52,50 +49,6 @@ const normalizeSupplier = (supplier) => ({
   itemRequests: (getValue(supplier, 'itemRequests') || []).map(request => normalizeRequest(request, 'item')),
 })
 
-const getMonthKey = (date) => date.toISOString().slice(0, 7)
-
-const buildMockResponse = ({ search = '', months = 2, activeOnly = true } = {}) => {
-  const today = new Date()
-  const activeMonth = getMonthKey(today)
-  const previousMonthDate = new Date(today.getFullYear(), today.getMonth() - 1, 1)
-  const previousMonth = getMonthKey(previousMonthDate)
-
-  const visibleMonths = new Set(
-    Array.from({ length: months }, (_, index) => {
-      const month = new Date(today.getFullYear(), today.getMonth() - index, 1)
-      return getMonthKey(month)
-    })
-  )
-
-  const term = search.trim().toLowerCase()
-
-  const visibleSuppliers = suppliers
-    .filter(supplier => !activeOnly || supplier.status === 'active')
-    .filter(supplier => (
-      !term ||
-      supplier.name.toLowerCase().includes(term) ||
-      supplier.regNo.toLowerCase().includes(term) ||
-      supplier.route.toLowerCase().includes(term)
-    ))
-    .map(supplier => {
-      const inVisibleMonth = request => visibleMonths.has(String(request.date || '').slice(0, 7))
-
-      return normalizeSupplier({
-        ...supplier,
-        advanceRequests: advanceRequests.filter(request => request.regNo === supplier.regNo && inVisibleMonth(request)),
-        fertilizerRequests: fertilizerRequests.filter(request => request.regNo === supplier.regNo && inVisibleMonth(request)),
-        itemRequests: itemRequests.filter(request => request.regNo === supplier.regNo && inVisibleMonth(request)),
-      })
-    })
-
-  return {
-    suppliers: visibleSuppliers,
-    activeMonth,
-    previousMonth,
-    source: 'mock',
-  }
-}
-
 const normalizeResponse = (response, source = 'api') => ({
   suppliers: (getValue(response, 'suppliers') || []).map(normalizeSupplier),
   activeMonth: String(getValue(response, 'activeMonth') || ''),
@@ -103,66 +56,31 @@ const normalizeResponse = (response, source = 'api') => ({
   source,
 })
 
-const withMockFallback = async (request, mockFactory) => {
-  if (!shouldUseApi()) {
-    return mockFactory()
-  }
-
-  try {
-    return await request()
-  } catch (error) {
-    if (error.name === 'AbortError') {
-      throw error
-    }
-
-    if (env.enableMockData) {
-      return {
-        ...mockFactory(),
-        warning: error.message,
-      }
-    }
-
-    throw error
-  }
-}
-
 export const supplierDashboardApi = {
-  listSuppliers: ({ search = '', months = 2, activeOnly = true, signal } = {}) => (
-    withMockFallback(
-      async () => {
-        const params = new URLSearchParams({
-          months: String(months),
-          activeOnly: String(activeOnly),
-        })
+  async listSuppliers({ search = '', months = 2, activeOnly = true, signal } = {}) {
+    const params = new URLSearchParams({
+      months: String(months),
+      activeOnly: String(activeOnly),
+    })
 
-        if (search.trim()) {
-          params.set('search', search.trim())
-        }
+    if (search.trim()) {
+      params.set('search', search.trim())
+    }
 
-        const response = await adminApiRequest(`/api/SupplierDashboard/suppliers?${params.toString()}`, {
-          method: 'GET',
-          signal,
-        })
+    const response = await adminApiRequest(`/api/SupplierDashboard/suppliers?${params.toString()}`, {
+      method: 'GET',
+      signal,
+    })
 
-        return normalizeResponse(response)
-      },
-      () => buildMockResponse({ search, months, activeOnly })
-    )
-  ),
+    return normalizeResponse(response)
+  },
 
-  getSupplier: ({ regNo, months = 2, signal } = {}) => (
-    withMockFallback(
-      async () => {
-        const response = await adminApiRequest(`/api/SupplierDashboard/suppliers/${regNo}?months=${months}`, {
-          method: 'GET',
-          signal,
-        })
+  async getSupplier({ regNo, months = 2, signal } = {}) {
+    const response = await adminApiRequest(`/api/SupplierDashboard/suppliers/${regNo}?months=${months}`, {
+      method: 'GET',
+      signal,
+    })
 
-        return normalizeSupplier(response)
-      },
-      () => buildMockResponse({ months, activeOnly: false }).suppliers.find(supplier => (
-        supplier.regNo === String(regNo) || String(supplier.id) === String(regNo)
-      ))
-    )
-  ),
+    return normalizeSupplier(response)
+  },
 }

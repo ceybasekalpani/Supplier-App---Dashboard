@@ -12,6 +12,7 @@ import { dashboardUsersApi } from '../services/dashboardUsersApi';
 import { adminAuthStorage } from '../services/adminApiClient';
 import { hasAdminPermission } from '../services/adminPermissions';
 import { dashboardPermissionsApi } from '../services/dashboardPermissionsApi';
+import { focusNextFieldOnEnter } from '../utils/keyboardNav';
 
 const UserManagement = () => {
   const [users, setUsers] = useState([]);
@@ -81,8 +82,8 @@ const UserManagement = () => {
     dashboardUsersApi
       .list({ search: searchTerm, status: statusFilter, signal: controller.signal })
       .then(result => {
-        setUsers(result.users);
-        setSummary(result.summary);
+        setUsers(result.users || []);
+        setSummary(result.summary || { totalAdministrators: 0, activeUsers: 0, inactiveUsers: 0 });
       })
       .catch(error => {
         if (error.name !== 'AbortError') {
@@ -366,7 +367,7 @@ const UserManagement = () => {
         <div className="flex gap-6 flex-wrap lg:flex-nowrap">
           {/* Users Table Section */}
           <div className="flex-1 min-w-0 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
-            <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex flex-wrap gap-3 justify-between items-center">
+            <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex flex-wrap gap-3 justify-between items-center" onKeyDown={focusNextFieldOnEnter}>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input type="text" placeholder="Search by name, email or username..." value={searchTerm} onChange={(e) => { setLoading(true); setSearchTerm(e.target.value); }} className="pl-9 pr-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-white w-64 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500" />
@@ -449,7 +450,7 @@ const UserManagement = () => {
           </div>
 
           {/* Create/Edit Form Section */}
-          <div className="w-96 flex-shrink-0 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-5 space-y-4">
+          <div className="w-96 flex-shrink-0 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-5 space-y-4" onKeyDown={focusNextFieldOnEnter}>
             <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-700 pb-3">
               <h3 className="font-semibold text-slate-900 dark:text-white">{editingUser ? 'Edit User' : 'Create New User'}</h3>
               {editingUser && <button onClick={resetForm} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>}

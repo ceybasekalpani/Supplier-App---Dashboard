@@ -19,11 +19,6 @@ import {
   RefreshCw,
 } from 'lucide-react'
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts'
-import {
-  suppliers as mockSuppliers,
-  leafDeliveries,
-  leafRates,
-} from '../data/mockData'
 import StatusBadge, { getStatusChartColor } from '../components/ui/StatusBadge'
 import Combobox from '../components/ui/Combobox'
 import { dashboardRequestsApi } from '../services/dashboardRequestsApi'
@@ -33,6 +28,7 @@ import { adminAuthStorage } from '../services/adminApiClient'
 import { hasAdminPermission, hasExplicitAdminPermission } from '../services/adminPermissions'
 import { dashboardPermissionsApi } from '../services/dashboardPermissionsApi'
 import { downloadDocReport, printReportAsPdf } from '../utils/reports'
+import { focusNextFieldOnEnter } from '../utils/keyboardNav'
 
 const tabs = [
   { id: 'advance', label: 'Advance Requests', icon: Banknote },
@@ -109,7 +105,7 @@ function initials(name = '') {
 }
 
 function Avatar({ name, size = 'md' }) {
-  const classes = size === 'lg' ? 'w-12 h-12 text-base' : 'w-9 h-9 text-sm'
+  const classes = size === 'xl' ? 'w-14 h-14 text-lg' : size === 'lg' ? 'w-12 h-12 text-base' : 'w-9 h-9 text-sm'
 
   return (
     <div className={`${classes} rounded-full bg-green-100 flex items-center justify-center font-semibold text-green-700 shrink-0`}>
@@ -151,23 +147,6 @@ function daysInMonth(year, month) {
   return new Date(year, month, 0).getDate()
 }
 
-function monthEnd(dateString) {
-  const { year, month } = parseDateParts(dateString)
-
-  if (!year || !month) return ''
-
-  return formatDateParts(year, month, daysInMonth(year, month))
-}
-
-function nextMonthStart(dateString) {
-  const { year, month } = parseDateParts(dateString)
-
-  if (!year || !month) return ''
-
-  const nextMonth = addMonthsToYearMonth(year, month, 1)
-  return formatDateParts(nextMonth.year, nextMonth.month, 1)
-}
-
 function nextMonthSameDay(dateString) {
   const { year, month, day } = parseDateParts(dateString)
 
@@ -177,87 +156,6 @@ function nextMonthSameDay(dateString) {
   const safeDay = Math.min(day, daysInMonth(nextMonth.year, nextMonth.month))
 
   return formatDateParts(nextMonth.year, nextMonth.month, safeDay)
-}
-
-function monthKey(date) {
-  return String(date || '').slice(0, 7)
-}
-
-function rateFor(date) {
-  return leafRates.find(rate => rate.month === monthKey(date)) || {
-    superRate: 0,
-    normalRate: 0,
-  }
-}
-
-function summarizeRows(rows) {
-  return rows.reduce((acc, row) => ({
-    superNet: acc.superNet + Number(row.superNet || 0),
-    normalNet: acc.normalNet + Number(row.normalNet || 0),
-    total: acc.total + Number(row.total || 0),
-  }), {
-    superNet: 0,
-    normalNet: 0,
-    total: 0,
-  })
-}
-
-function buildAdvanceRows(regNo, from, to) {
-  return leafDeliveries
-    .filter(row => row.regNo === regNo && isInDateRange(row.date, from, to))
-    .map(row => {
-      const rate = rateFor(row.date)
-
-      return {
-        ...row,
-        superRate: rate.superRate,
-        normalRate: rate.normalRate,
-        total: (Number(rate.superRate || 0) * Number(row.superNet || 0)) +
-          (Number(rate.normalRate || 0) * Number(row.normalNet || 0)),
-      }
-    })
-}
-
-function calculateAdvanceLimit(regNo, salaryFrom) {
-  const selectedMonthTo = monthEnd(salaryFrom)
-  const nextMonthFrom = nextMonthStart(salaryFrom)
-  const calculationTo = nextMonthSameDay(salaryFrom)
-  const cycleEnd = calculationTo
-
-  const selectedRows = buildAdvanceRows(regNo, salaryFrom, selectedMonthTo)
-  const nextRows = buildAdvanceRows(regNo, nextMonthFrom, calculationTo)
-  const rows = [...selectedRows, ...nextRows]
-
-  const selected = summarizeRows(selectedRows)
-  const next = summarizeRows(nextRows)
-
-  return {
-    rows,
-    superNet: selected.superNet + next.superNet,
-    normalNet: selected.normalNet + next.normalNet,
-    total: selected.total + next.total,
-    calculationFrom: salaryFrom,
-    calculationTo,
-    cycleEnd,
-    periods: [
-      {
-        key: 'selected',
-        label: 'Selected month',
-        from: salaryFrom,
-        to: selectedMonthTo,
-        rows: selectedRows,
-        ...selected,
-      },
-      {
-        key: 'next',
-        label: 'Next month',
-        from: nextMonthFrom,
-        to: calculationTo,
-        rows: nextRows,
-        ...next,
-      },
-    ],
-  }
 }
 
 function requestLabel(request, tab) {
@@ -441,31 +339,30 @@ function RequestTableSummary({ rows, tab }) {
 
 function SupplierWindow({ regNo, tab, requestsByType, salaryDate, onClose }) {
   const salaryFrom = salaryDate || new Date().toISOString().slice(0, 10)
-  const fallbackSupplier = mockSuppliers.find(supplier => supplier.regNo === regNo)
-  const [supplier, setSupplier] = useState(fallbackSupplier || null)
-  const [supplierLoading, setSupplierLoading] = useState(false)
+  const [supplier, setSupplier] = useState(null)
+  const [supplierLoading, setSupplierLoading] = useState(true)
+  const [supplierError, setSupplierError] = useState('')
   const [summaryStatus, setSummaryStatus] = useState('all')
+  const [summaryCategory, setSummaryCategory] = useState('all')
   const [realAdvanceLimit, setRealAdvanceLimit] = useState(null)
   const [advanceLimitLoading, setAdvanceLimitLoading] = useState(tab === 'advance')
 
   useEffect(() => {
     let mounted = true
 
-    setSupplier(fallbackSupplier || null)
+    setSupplier(null)
+    setSupplierError('')
     setSupplierLoading(true)
 
     supplierDashboardApi
       .getSupplier({ regNo, months: 2 })
       .then(result => {
         if (mounted && result) {
-          setSupplier({
-            ...result,
-            land: result.land || fallbackSupplier?.land,
-          })
+          setSupplier(result)
         }
       })
-      .catch(() => {
-        if (mounted) setSupplier(fallbackSupplier || null)
+      .catch(error => {
+        if (mounted) setSupplierError(error.message || 'Unable to load supplier details')
       })
       .finally(() => {
         if (mounted) setSupplierLoading(false)
@@ -474,7 +371,7 @@ function SupplierWindow({ regNo, tab, requestsByType, salaryDate, onClose }) {
     return () => {
       mounted = false
     }
-  }, [fallbackSupplier, regNo])
+  }, [regNo])
 
   useEffect(() => {
     if (tab !== 'advance') return
@@ -499,7 +396,7 @@ function SupplierWindow({ regNo, tab, requestsByType, salaryDate, onClose }) {
     }
   }, [regNo, tab, salaryFrom])
 
-  if (!supplier && supplierLoading) {
+  if (supplierLoading) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
         <div className="rounded-lg bg-white px-5 py-4 text-sm font-semibold text-slate-600 shadow-xl dark:bg-slate-900 dark:text-slate-200">
@@ -509,11 +406,30 @@ function SupplierWindow({ regNo, tab, requestsByType, salaryDate, onClose }) {
     )
   }
 
-  if (!supplier) return null
+  if (!supplier) {
+    return (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
+        onClick={event => event.target === event.currentTarget && onClose()}
+      >
+        <div className="w-full max-w-sm rounded-lg bg-white p-5 text-center shadow-xl dark:bg-slate-900">
+          <p className="text-sm font-semibold text-red-600 dark:text-red-400">
+            {supplierError || 'Unable to load supplier details'}
+          </p>
+          <button
+            type="button"
+            onClick={onClose}
+            className="mt-4 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    )
+  }
 
-  const limit = calculateAdvanceLimit(regNo, salaryFrom)
   const isAdvanceView = tab === 'advance'
-  const leafNetWeight = limit.superNet + limit.normalNet
+  const cycleEnd = isAdvanceView ? nextMonthSameDay(salaryFrom) : null
 
   const allSupplierRequests = [
     ...(requestsByType?.advance || []).map(request => ({ ...request, category: 'Advance' })),
@@ -521,9 +437,11 @@ function SupplierWindow({ regNo, tab, requestsByType, salaryDate, onClose }) {
     ...(requestsByType?.items || []).map(request => ({ ...request, category: 'Item' })),
   ].filter(request => request.regNo === regNo)
 
-  const summarySource = summaryStatus === 'all'
-    ? allSupplierRequests
-    : allSupplierRequests.filter(request => request.status === summaryStatus)
+  const summarySource = allSupplierRequests.filter(request => {
+    const statusMatch = summaryStatus === 'all' || request.status === summaryStatus
+    const categoryMatch = summaryCategory === 'all' || request.category === summaryCategory
+    return statusMatch && categoryMatch
+  })
 
   const summary = ['approved', 'pending', 'rejected']
     .map(status => ({
@@ -539,9 +457,6 @@ function SupplierWindow({ regNo, tab, requestsByType, salaryDate, onClose }) {
   }
 
   const showBank = tab === 'advance' && /(bank|cheque|check)/i.test(supplier.payment || '')
-
-  const activeRequestLabel = tab === 'advance' ? 'Advance' : tab === 'fertilizer' ? 'Fertilizer' : 'Item'
-  const ActiveIcon = tab === 'advance' ? WalletCards : tab === 'fertilizer' ? Sprout : Package
 
   const supplierRows = [
     ['Registration No.', supplier.regNo],
@@ -576,9 +491,7 @@ function SupplierWindow({ regNo, tab, requestsByType, salaryDate, onClose }) {
 
           <div className="flex items-center justify-between gap-4 px-6 py-5">
             <div className="flex min-w-0 items-center gap-4">
-              <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-slate-950 text-base font-bold text-white shadow-lg dark:bg-white dark:text-slate-950">
-                {initials(supplier.name)}
-              </div>
+              <Avatar name={supplier.name} size="xl" />
 
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
@@ -613,12 +526,14 @@ function SupplierWindow({ regNo, tab, requestsByType, salaryDate, onClose }) {
         </header>
 
         <div className="max-h-[82vh] overflow-y-auto bg-slate-50 p-5 dark:bg-slate-950">
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[340px_1fr]">
-            <aside className="space-y-3">
+          <div className="grid grid-cols-1 gap-4 xl:h-[min(70vh,700px)] xl:grid-cols-[340px_1fr] xl:grid-rows-[minmax(0,1fr)]">
+            <aside className="space-y-3 overflow-y-auto pr-1 xl:h-full">
               <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-400">
-                  <User size={15} className="text-emerald-600" />
-                  Supplier profile
+                <div className="mb-3 flex items-center gap-2.5">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-300 dark:ring-emerald-900/40">
+                    <User size={16} />
+                  </span>
+                  <p className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-200">Supplier profile</p>
                 </div>
 
                 <div className="space-y-2">
@@ -635,9 +550,11 @@ function SupplierWindow({ regNo, tab, requestsByType, salaryDate, onClose }) {
               </section>
 
               <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-400">
-                  <TreePine size={15} className="text-amber-600" />
-                  Land profile
+                <div className="mb-3 flex items-center gap-2.5">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50 text-amber-700 ring-1 ring-amber-100 dark:bg-amber-900/20 dark:text-amber-300 dark:ring-amber-900/40">
+                    <TreePine size={16} />
+                  </span>
+                  <p className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-200">Land profile</p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
@@ -655,9 +572,11 @@ function SupplierWindow({ regNo, tab, requestsByType, salaryDate, onClose }) {
 
               {showBank && (
                 <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                  <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-400">
-                    <Landmark size={15} className="text-teal-600" />
-                    Bank profile
+                  <div className="mb-3 flex items-center gap-2.5">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-50 text-teal-700 ring-1 ring-teal-100 dark:bg-teal-900/20 dark:text-teal-300 dark:ring-teal-900/40">
+                      <Landmark size={16} />
+                    </span>
+                    <p className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-200">Bank profile</p>
                   </div>
 
                   <div className="space-y-2">
@@ -675,45 +594,45 @@ function SupplierWindow({ regNo, tab, requestsByType, salaryDate, onClose }) {
               )}
             </aside>
 
-            <main className="space-y-3">
-              <section className="grid grid-cols-1 gap-3">
-                <div className="relative overflow-hidden rounded-lg border border-emerald-100 bg-emerald-50/80 p-3 shadow-sm dark:border-emerald-900/50 dark:bg-emerald-900/15">
-                  <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
-                    {isAdvanceView ? <WalletCards size={15} /> : <ActiveIcon size={15} />}
-                    {isAdvanceView ? 'Advance eligibility' : `${activeRequestLabel} eligibility`}
+            <main className="flex min-h-0 flex-col gap-3">
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-500 shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 sm:hidden">
+                Salary date
+                <span className="text-xs font-bold text-slate-800 dark:text-white">{salaryFrom}</span>
+              </div>
+
+              {isAdvanceView && (
+                <section className="relative overflow-hidden rounded-lg border border-emerald-200 bg-linear-to-br from-emerald-50 via-white to-white p-4 shadow-sm dark:border-emerald-900/50 dark:from-emerald-900/20 dark:via-slate-900 dark:to-slate-900">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white shadow-sm">
+                        <WalletCards size={17} />
+                      </span>
+                      <div>
+                        <p className="text-xs font-bold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Maximum advance limit</p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">Eligibility cycle: {salaryFrom} to {cycleEnd || '-'}</p>
+                      </div>
+                    </div>
+
+                    <p className="text-2xl font-bold text-emerald-800 dark:text-emerald-200">
+                      {advanceLimitLoading ? '...' : currency(realAdvanceLimit)}
+                    </p>
                   </div>
+                </section>
+              )}
 
-                  {isAdvanceView ? (
-                    <>
-                      <p className="mt-2 text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Maximum advance limit</p>
-                      <p className="mt-0.5 text-xl font-bold text-emerald-800 dark:text-emerald-200">
-                        {advanceLimitLoading ? '...' : currency(realAdvanceLimit)}
-                      </p>
-                      <p className="mt-1 text-xs font-semibold text-slate-600 dark:text-slate-300">{salaryFrom} to {limit.cycleEnd || '-'}</p>
-                    </>
-                  ) : (
-                    <>
-                      <p className="mt-2 text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Leaf net weight</p>
-                      <p className="mt-0.5 text-xl font-bold text-emerald-800 dark:text-emerald-200">{leafNetWeight.toLocaleString()} kg</p>
-                      <p className="mt-1 text-xs font-semibold text-slate-600 dark:text-slate-300">{salaryFrom} to {limit.cycleEnd || '-'}</p>
-                    </>
-                  )}
-                </div>
-
-                <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-500 shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 sm:hidden">
-                  Salary date
-                  <span className="text-xs font-bold text-slate-800 dark:text-white">{salaryFrom}</span>
-                </div>
-              </section>
-
-              <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                 <div className="mb-3 flex items-center justify-between gap-3 flex-wrap">
-                  <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                    <Leaf size={15} className="text-green-700 dark:text-green-300" />
-                    Supplier request summary
+                  <div className="flex items-center gap-2.5">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-green-50 text-green-700 ring-1 ring-green-100 dark:bg-green-900/20 dark:text-green-300 dark:ring-green-900/40">
+                      <Leaf size={16} />
+                    </span>
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-200">Supplier request summary</p>
+                      <p className="text-[11px] text-slate-400">{summarySource.length} of {allSupplierRequests.length} requests shown</p>
+                    </div>
                   </div>
 
-                  <div className="flex gap-1">
+                  <div className="flex flex-wrap gap-1">
                     {['all', 'approved', 'pending', 'rejected'].map(status => (
                       <button
                         key={status}
@@ -731,57 +650,119 @@ function SupplierWindow({ regNo, tab, requestsByType, salaryDate, onClose }) {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 gap-3 lg:grid-cols-[170px_1fr]">
-                  <div className="h-36 rounded-lg border border-slate-100 bg-slate-50 p-2 dark:border-slate-800 dark:bg-slate-800/60">
-                    {summary.length > 0 ? (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie data={summary} dataKey="value" nameKey="name" innerRadius={32} outerRadius={56} paddingAngle={3}>
-                            {summary.map(item => (
-                              <Cell key={item.name} fill={getStatusChartColor(item.name)} />
-                            ))}
-                          </Pie>
-                          <Tooltip />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    ) : (
-                      <div className="flex h-full items-center justify-center text-xs text-slate-400">No requests</div>
+                <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-[190px_1fr] lg:grid-rows-[minmax(0,1fr)]">
+                  <div className="flex min-h-0 flex-col gap-3 overflow-y-auto rounded-lg border border-slate-100 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-800/60">
+                    <div className="h-40">
+                      {summary.length > 0 ? (
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie data={summary} dataKey="value" nameKey="name" innerRadius={34} outerRadius={58} paddingAngle={3}>
+                              {summary.map(item => (
+                                <Cell key={item.name} fill={getStatusChartColor(item.name)} />
+                              ))}
+                            </Pie>
+                            <Tooltip />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      ) : (
+                        <div className="flex h-full items-center justify-center text-xs text-slate-400">No requests</div>
+                      )}
+                    </div>
+
+                    {summary.length > 0 && (
+                      <div className="space-y-1.5 border-t border-slate-200 pt-2.5 dark:border-slate-700">
+                        {summary.map(item => (
+                          <div key={item.name} className="flex items-center justify-between gap-2 text-[11px]">
+                            <span className="flex items-center gap-1.5 font-semibold capitalize text-slate-600 dark:text-slate-300">
+                              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: getStatusChartColor(item.name) }} />
+                              {item.name}
+                            </span>
+                            <span className="font-bold text-slate-800 dark:text-slate-100">{item.value}</span>
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
 
-                  <div className="space-y-2">
+                  <div className="flex min-h-0 flex-1 flex-col gap-2">
                     <div className="grid grid-cols-3 gap-2">
                       {[
-                        ['Advance', requestCounts.advance, 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300'],
-                        ['Fertilizer', requestCounts.fertilizer, 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300'],
-                        ['Items', requestCounts.items, 'bg-teal-50 text-teal-700 dark:bg-teal-900/20 dark:text-teal-300'],
-                      ].map(([label, value, tone]) => (
-                        <div key={label} className={`rounded-md px-2 py-1.5 text-center ${tone}`}>
-                          <p className="text-base font-bold">{value}</p>
-                          <p className="text-[10px] font-semibold uppercase tracking-wide">{label}</p>
-                        </div>
-                      ))}
+                        {
+                          label: 'Advance',
+                          category: 'Advance',
+                          value: requestCounts.advance,
+                          base: 'bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-900/20 dark:text-amber-300 dark:hover:bg-amber-900/30',
+                        },
+                        {
+                          label: 'Fertilizer',
+                          category: 'Fertilizer',
+                          value: requestCounts.fertilizer,
+                          base: 'bg-green-50 text-green-700 hover:bg-green-100 dark:bg-green-900/20 dark:text-green-300 dark:hover:bg-green-900/30',
+                        },
+                        {
+                          label: 'Items',
+                          category: 'Item',
+                          value: requestCounts.items,
+                          base: 'bg-teal-50 text-teal-700 hover:bg-teal-100 dark:bg-teal-900/20 dark:text-teal-300 dark:hover:bg-teal-900/30',
+                        },
+                      ].map(tile => {
+                        const isActive = summaryCategory === tile.category
+
+                        return (
+                          <button
+                            key={tile.label}
+                            type="button"
+                            onClick={() => setSummaryCategory(isActive ? 'all' : tile.category)}
+                            className={`rounded-md px-2 py-1.5 text-center transition-colors ${
+                              isActive
+                                ? 'bg-green-700 text-white ring-2 ring-green-700 ring-offset-1 dark:ring-offset-slate-900'
+                                : tile.base
+                            }`}
+                          >
+                            <p className="text-base font-bold">{tile.value}</p>
+                            <p className="text-[10px] font-semibold uppercase tracking-wide">{tile.label}</p>
+                          </button>
+                        )
+                      })}
                     </div>
 
-                    <div className="max-h-32 space-y-1.5 overflow-y-auto pr-1">
-                      {summarySource.map(request => (
-                        <div
-                          key={`${request.category}-${request.id}`}
-                          className="flex items-center justify-between gap-3 rounded-md border border-slate-100 bg-slate-50 px-2.5 py-1.5 dark:border-slate-800 dark:bg-slate-800/70"
-                        >
-                          <div className="min-w-0">
-                            <p className="truncate text-xs font-semibold text-slate-800 dark:text-slate-100">
-                              {request.category} / {requestLabel(request, request.category === 'Advance' ? 'advance' : 'items')}
-                            </p>
-                            <p className="text-[11px] text-slate-400">{request.date}</p>
-                          </div>
+                    <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto rounded-lg border border-slate-100 bg-slate-50/60 p-2 pr-1.5 dark:border-slate-800 dark:bg-slate-800/40">
+                      {summarySource.map(request => {
+                        const CategoryIcon = request.category === 'Advance'
+                          ? Banknote
+                          : request.category === 'Fertilizer'
+                            ? Sprout
+                            : Package
 
-                          <StatusBadge status={request.status} />
-                        </div>
-                      ))}
+                        const categoryTone = request.category === 'Advance'
+                          ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300'
+                          : request.category === 'Fertilizer'
+                            ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300'
+                            : 'bg-teal-50 text-teal-700 dark:bg-teal-900/20 dark:text-teal-300'
+
+                        return (
+                          <div
+                            key={`${request.category}-${request.id}`}
+                            className="flex items-center gap-3 rounded-md border border-slate-100 bg-white px-2.5 py-2 shadow-xs dark:border-slate-800 dark:bg-slate-900/70"
+                          >
+                            <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${categoryTone}`}>
+                              <CategoryIcon size={13} />
+                            </span>
+
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-xs font-semibold text-slate-800 dark:text-slate-100">
+                                {request.category} / {requestLabel(request, request.category === 'Advance' ? 'advance' : 'items')}
+                              </p>
+                              <p className="text-[11px] text-slate-400">{request.date}</p>
+                            </div>
+
+                            <StatusBadge status={request.status} />
+                          </div>
+                        )
+                      })}
 
                       {summarySource.length === 0 && (
-                        <div className="py-8 text-center text-sm text-slate-400">No matching requests</div>
+                        <div className="flex h-full items-center justify-center py-8 text-center text-sm text-slate-400">No matching requests</div>
                       )}
                     </div>
                   </div>
@@ -1447,7 +1428,7 @@ export default function Requests() {
 
       <div className="flex flex-col gap-4 xl:flex-row">
         <div className="min-w-0 flex-1">
-          <div className="rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
+          <div className="rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800" onKeyDown={focusNextFieldOnEnter}>
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-700">
               <div className="flex min-w-72 flex-1 items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 dark:border-slate-700 dark:bg-slate-900">
                 <Search size={18} className="text-slate-400" />

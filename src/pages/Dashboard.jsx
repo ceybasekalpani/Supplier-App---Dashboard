@@ -5,7 +5,6 @@ import MonthlyRequestChart from '../components/dashboard/MonthlyRequestChart'
 import QuickActionsPanel from '../components/dashboard/QuickActionsPanel'
 import RecentActivityTable from '../components/dashboard/RecentActivityTable'
 import PageHeader from '../components/ui/PageHeader'
-import { getDashboardMetrics } from '../data/dashboardMetrics'
 import { dashboardMetricsApi } from '../services/dashboardMetricsApi'
 import { adminAuthStorage } from '../services/adminApiClient'
 import { hasAdminPermission } from '../services/adminPermissions'
@@ -13,7 +12,10 @@ import { dashboardPermissionsApi } from '../services/dashboardPermissionsApi'
 
 export default function Dashboard() {
   const [dashboard, setDashboard] = useState(() => ({
-    ...getDashboardMetrics(),
+    stats: [],
+    monthlyRequestVolume: [],
+    requestQueue: [],
+    recentActivities: [],
     source: 'initial',
   }))
 
@@ -91,7 +93,7 @@ export default function Dashboard() {
         <PageHeader
           title="Factory Dashboard"
           description="Supplier requests, leaf intake, and approval movement at a glance."
-          badge={dashboard.source === 'mock' ? 'Preview dashboard data' : 'Tea supplier operations'}
+          badge="Tea supplier operations"
           icon={Leaf}
         />
 
@@ -109,11 +111,7 @@ export default function Dashboard() {
         <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-900/15 dark:text-amber-200">
           <AlertCircle size={18} className="mt-0.5 flex-shrink-0" />
           <div>
-            <p className="font-semibold">
-              {dashboard.source === 'mock'
-                ? 'Using local preview metrics'
-                : 'Dashboard metrics could not be loaded'}
-            </p>
+            <p className="font-semibold">Dashboard metrics could not be loaded</p>
             <p className="text-xs opacity-80">{error}</p>
           </div>
         </div>

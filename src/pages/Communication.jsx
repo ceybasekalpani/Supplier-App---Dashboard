@@ -24,6 +24,7 @@ import Combobox from '../components/ui/Combobox'
 import { adminAuthStorage } from '../services/adminApiClient'
 import { hasAdminPermission } from '../services/adminPermissions'
 import { dashboardPermissionsApi } from '../services/dashboardPermissionsApi'
+import { focusNextFieldOnEnter } from '../utils/keyboardNav'
 
 const tabs = [
   { id: 'news', label: 'News', icon: Newspaper },
@@ -253,8 +254,8 @@ export default function Communication() {
     communicationsApi
       .getAll({ signal: controller.signal })
       .then(result => {
-        setNewsItems(result.news)
-        setNotifications(result.notifications)
+        setNewsItems(result.news || [])
+        setNotifications(result.notifications || [])
       })
       .catch(error => {
         if (error.name !== 'AbortError') {
@@ -899,7 +900,7 @@ export default function Communication() {
             )}
           </div>
 
-          <aside className="bg-slate-50/70 p-4 dark:bg-slate-900/30">
+          <aside className="bg-slate-50/70 p-4 dark:bg-slate-900/30" onKeyDown={focusNextFieldOnEnter}>
             {tab === 'news' ? (
               <div className="rounded-xl border bg-white p-4 shadow-sm dark:bg-slate-800" style={themedPrimaryBorder}>
                 <div className="flex items-start justify-between gap-3">

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Leaf, LogIn, RefreshCw } from 'lucide-react'
 import { adminAuthApi } from '../services/adminAuthApi'
+import { focusNextFieldOnEnter } from '../utils/keyboardNav'
 
 export default function AdminLogin() {
   const navigate = useNavigate()
@@ -54,6 +55,7 @@ export default function AdminLogin() {
     <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 dark:bg-slate-950">
       <form
         onSubmit={handleSubmit}
+        onKeyDown={focusNextFieldOnEnter}
         className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-800 dark:bg-slate-900"
       >
         <div className="mb-6 text-center">

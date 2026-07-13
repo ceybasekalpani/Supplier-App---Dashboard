@@ -71,8 +71,6 @@ const readErrorMessage = async (response) => {
   }
 }
 
-export const shouldUseApi = () => Boolean(env.apiBaseUrl) || !env.enableMockData
-
 export async function apiRequest(path, options = {}) {
   const headers = new Headers(options.headers || {})
   const { body, skipAuth = false, ...restOptions } = options

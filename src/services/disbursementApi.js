@@ -1,12 +1,4 @@
-import { env } from '../config/env'
-import {
-  approvedAdvances,
-  approvedFertilizers,
-  approvedItems,
-  disbursementTrackingRows,
-} from '../data/mockData'
 import { adminApiRequest } from './adminApiClient'
-import { shouldUseApi } from './apiClient'
 
 const getValue = (source, camelKey, pascalKey = camelKey[0].toUpperCase() + camelKey.slice(1)) => (
   source?.[camelKey] ?? source?.[pascalKey]
@@ -100,49 +92,6 @@ const normalizeQueueResponse = (response) => ({
   fertilizer: (getValue(response, 'fertilizers') || []).map(row => normalizeQueueRow(row, 'fertilizer')),
   items: (getValue(response, 'items') || []).map(row => normalizeQueueRow(row, 'items')),
 })
-
-const buildMockQueue = ({ route = '', fromDate = '', toDate = '' } = {}) => {
-  const filterRows = rows => rows
-    .filter(row => !route || route === 'all' || String(row.route || '') === route)
-    .filter(row => {
-      const rowDate = String(row.approvedDate || '').slice(0, 10)
-      if (fromDate && rowDate < fromDate) return false
-      if (toDate && rowDate > toDate) return false
-      return true
-    })
-
-  return {
-    advance: filterRows(approvedAdvances).map(row => normalizeQueueRow(row, 'advance')),
-    fertilizer: filterRows(approvedFertilizers).map(row => normalizeQueueRow(row, 'fertilizer')),
-    items: filterRows(approvedItems).map(row => normalizeQueueRow(row, 'items')),
-  }
-}
-
-const buildMockDeliveryNotes = () => ([
-  {
-    id: 1,
-    deliveryNoteNo: 'DN-LOCAL-0001',
-    dispatchDate: '2026-06-23T09:30:00',
-    borrowerName: 'Local Driver',
-    borrowerRole: 'Driver',
-    vehicleNo: 'LOCAL-001',
-    routeName: 'Route A - Kandy',
-    status: 'dispatched',
-    totalRecords: 3,
-    printUrl: '',
-  },
-])
-
-const withMockFallback = async (request, mockFactory) => {
-  if (!shouldUseApi()) return mockFactory()
-
-  try {
-    return await request()
-  } catch (error) {
-    if (error.name === 'AbortError' || !env.enableMockData) throw error
-    return mockFactory()
-  }
-}
 
 const normalizeTrackingRow = (row) => ({
   id: Number(getValue(row, 'id') || 0),
@@ -261,46 +210,25 @@ export const disbursementApi = {
     appendDateFilters(params, { fromDate, toDate })
 
     const query = params.toString()
-    return withMockFallback(
-      async () => {
-        const response = await adminApiRequest(`/api/Disbursement/queue${query ? `?${query}` : ''}`, {
-          method: 'GET',
-          signal,
-        })
+    const response = await adminApiRequest(`/api/Disbursement/queue${query ? `?${query}` : ''}`, {
+      method: 'GET',
+      signal,
+    })
 
-        return normalizeQueueResponse(response)
-      },
-      () => buildMockQueue({ route, fromDate, toDate })
-    )
+    return normalizeQueueResponse(response)
   },
 
   async issue({ issuedType, requestId, method }) {
     const normalizedType = normalizeIssuedType(issuedType)
 
-    return withMockFallback(
-      async () => {
-        const response = await adminApiRequest(`/api/Disbursement/${normalizedType}/${requestId}/issue`, {
-          method: 'POST',
-          body: JSON.stringify({
-            method,
-          }),
-        })
-
-        return normalizeTrackingRow(response)
-      },
-      () => normalizeTrackingRow({
-        id: Date.now(),
-        issuedType: normalizedType,
-        requestId,
-        requestNo: `LOCAL-${requestId}`,
-        regNo: '',
-        supplierName: 'Local Supplier',
-        issuedDetails: method || 'Dispatched',
-        issueDate: new Date().toISOString(),
+    const response = await adminApiRequest(`/api/Disbursement/${normalizedType}/${requestId}/issue`, {
+      method: 'POST',
+      body: JSON.stringify({
         method,
-        currentStatus: ['Account Transfer', 'Bank Transfer'].includes(method) ? 'dispatched' : 'awaiting',
-      })
-    )
+      }),
+    })
+
+    return normalizeTrackingRow(response)
   },
 
   async getTracking({ issuedType = '', status = '', search = '', fromDate = '', toDate = '', signal } = {}) {
@@ -313,92 +241,44 @@ export const disbursementApi = {
     appendDateFilters(params, { fromDate, toDate })
 
     const query = params.toString()
-    return withMockFallback(
-      async () => {
-        const response = await adminApiRequest(`/api/Disbursement/tracking${query ? `?${query}` : ''}`, {
-          method: 'GET',
-          signal,
-        })
+    const response = await adminApiRequest(`/api/Disbursement/tracking${query ? `?${query}` : ''}`, {
+      method: 'GET',
+      signal,
+    })
 
-        return (response || []).map(normalizeTrackingRow)
-      },
-      () => disbursementTrackingRows
-        .map(normalizeTrackingRow)
-        .filter(row => !normalizedType || normalizedType === 'all' || row.issuedType === normalizedType)
-        .filter(row => !status || status === 'all' || row.currentStatus === status)
-        .filter(row => {
-          const term = search.trim().toLowerCase()
-          return !term ||
-            row.supplierName.toLowerCase().includes(term) ||
-            row.regNo.toLowerCase().includes(term) ||
-            row.issuedDetails.toLowerCase().includes(term)
-        })
-        .filter(row => {
-          const rowDate = dateOnly(row.issueDate)
-          if (fromDate && rowDate < fromDate) return false
-          if (toDate && rowDate > toDate) return false
-          return true
-        })
-    )
+    return (response || []).map(normalizeTrackingRow)
   },
 
   async markReceived({ id, completedBy, completedDevice }) {
-    return withMockFallback(
-      async () => {
-        const response = await adminApiRequest(`/api/Disbursement/tracking/${id}/received`, {
-          method: 'POST',
-          body: JSON.stringify({
-            completedBy,
-            completedDevice,
-          }),
-        })
-
-        return normalizeTrackingRow(response)
-      },
-      () => normalizeTrackingRow({
-        ...(disbursementTrackingRows.find(row => Number(row.id) === Number(id)) || { id }),
-        currentStatus: 'completed',
-        completedDate: new Date().toISOString(),
+    const response = await adminApiRequest(`/api/Disbursement/tracking/${id}/received`, {
+      method: 'POST',
+      body: JSON.stringify({
         completedBy,
         completedDevice,
-      })
-    )
+      }),
+    })
+
+    return normalizeTrackingRow(response)
   },
 
   async generateDeliveryNote({ records, borrowerName, borrowerRole, vehicleNo = '', routeName = '', remarks = '' }) {
-    return withMockFallback(
-      async () => {
-        const response = await adminApiRequest('/api/Disbursement/delivery-notes', {
-          method: 'POST',
-          body: JSON.stringify({
-            records: records.map(record => ({
-              issuedType: normalizeIssuedType(record.issuedType),
-              requestId: Number(record.requestId),
-              method: record.method || null,
-            })),
-            borrowerName,
-            borrowerRole,
-            vehicleNo,
-            routeName,
-            remarks,
-          }),
-        })
-
-        return normalizeDeliveryNote(response)
-      },
-      () => normalizeDeliveryNote({
-        id: Date.now(),
-        deliveryNoteNo: `DN-LOCAL-${String(records.length).padStart(4, '0')}`,
-        dispatchDate: new Date().toISOString(),
+    const response = await adminApiRequest('/api/Disbursement/delivery-notes', {
+      method: 'POST',
+      body: JSON.stringify({
+        records: records.map(record => ({
+          issuedType: normalizeIssuedType(record.issuedType),
+          requestId: Number(record.requestId),
+          method: record.method || null,
+        })),
         borrowerName,
         borrowerRole,
         vehicleNo,
         routeName,
         remarks,
-        status: 'dispatched',
-        totalRecords: records.length,
-      })
-    )
+      }),
+    })
+
+    return normalizeDeliveryNote(response)
   },
 
   async getDeliveryNotes({ status = '', search = '', fromDate = '', toDate = '', signal } = {}) {
@@ -409,101 +289,47 @@ export const disbursementApi = {
     appendDateFilters(params, { fromDate, toDate })
 
     const query = params.toString()
-    return withMockFallback(
-      async () => {
-        const response = await adminApiRequest(`/api/Disbursement/delivery-notes${query ? `?${query}` : ''}`, {
-          method: 'GET',
-          signal,
-        })
+    const response = await adminApiRequest(`/api/Disbursement/delivery-notes${query ? `?${query}` : ''}`, {
+      method: 'GET',
+      signal,
+    })
 
-        return (response || []).map(normalizeDeliveryNoteTracking)
-      },
-      () => buildMockDeliveryNotes().map(normalizeDeliveryNoteTracking)
-    )
+    return (response || []).map(normalizeDeliveryNoteTracking)
   },
 
   async getDeliveryNote(id) {
-    return withMockFallback(
-      async () => {
-        const response = await adminApiRequest(`/api/Disbursement/delivery-notes/${id}`, {
-          method: 'GET',
-        })
+    const response = await adminApiRequest(`/api/Disbursement/delivery-notes/${id}`, {
+      method: 'GET',
+    })
 
-        return normalizeDeliveryNote(response)
-      },
-      () => normalizeDeliveryNote({
-        ...buildMockDeliveryNotes()[0],
-        id,
-        details: disbursementTrackingRows.slice(0, 3).map(row => ({
-          id: row.id,
-          supplierRegNo: row.regNo,
-          supplierName: row.supplierName,
-          routeName: row.route,
-          disbursementRecordId: row.id,
-          requestId: row.requestId || row.id,
-          itemType: row.issuedType,
-          amount: row.amount,
-          quantity: row.qty,
-          unit: row.unit,
-          paymentType: row.method,
-          status: 'dispatched',
-        })),
-      })
-    )
+    return normalizeDeliveryNote(response)
   },
 
   async getDeliveryNotePrintHtml(id) {
-    return withMockFallback(
-      () => adminApiRequest(`/api/Disbursement/delivery-notes/${id}/print`, {
-        method: 'GET',
-      }),
-      () => '<html><body><h1>Local Delivery Note Preview</h1><p>Backend API is offline.</p></body></html>'
-    )
+    return adminApiRequest(`/api/Disbursement/delivery-notes/${id}/print`, {
+      method: 'GET',
+    })
   },
 
   async markDeliveryNoteReturned({ id, remarks = '' }) {
-    return withMockFallback(
-      async () => {
-        const response = await adminApiRequest(`/api/Disbursement/delivery-notes/${id}/returned`, {
-          method: 'POST',
-          body: JSON.stringify({ remarks }),
-        })
+    const response = await adminApiRequest(`/api/Disbursement/delivery-notes/${id}/returned`, {
+      method: 'POST',
+      body: JSON.stringify({ remarks }),
+    })
 
-        return normalizeDeliveryNote(response)
-      },
-      () => normalizeDeliveryNote({
-        ...buildMockDeliveryNotes()[0],
-        id,
-        status: 'returned',
-        remarks,
-      })
-    )
+    return normalizeDeliveryNote(response)
   },
 
   async markDeliveryNoteCompleted({ id, remarks = '', completedBy = '', completedDevice = '' }) {
-    return withMockFallback(
-      async () => {
-        const response = await adminApiRequest(`/api/Disbursement/delivery-notes/${id}/completed`, {
-          method: 'POST',
-          body: JSON.stringify({
-            remarks,
-            completedBy,
-            completedDevice,
-          }),
-        })
-
-        return normalizeDeliveryNote(response)
-      },
-      () => normalizeDeliveryNote({
-        ...buildMockDeliveryNotes()[0],
-        id,
-        status: 'completed',
-        completedAt: new Date().toISOString(),
-        completedDate: new Date().toISOString(),
+    const response = await adminApiRequest(`/api/Disbursement/delivery-notes/${id}/completed`, {
+      method: 'POST',
+      body: JSON.stringify({
+        remarks,
         completedBy,
         completedDevice,
-        remarks,
-      })
-    )
+      }),
+    })
+
+    return normalizeDeliveryNote(response)
   },
 }

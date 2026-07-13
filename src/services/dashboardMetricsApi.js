@@ -1,7 +1,4 @@
-import { env } from '../config/env'
-import { getDashboardMetrics } from '../data/dashboardMetrics'
 import { adminApiRequest } from './adminApiClient'
-import { shouldUseApi } from './apiClient'
 
 const getValue = (source, camelKey, pascalKey = camelKey[0].toUpperCase() + camelKey.slice(1)) => (
   source?.[camelKey] ?? source?.[pascalKey]
@@ -118,52 +115,18 @@ const normalizeMetrics = (response) => ({
   source: 'api',
 })
 
-const normalizeMockMetrics = () => {
-  const mock = getDashboardMetrics()
-
-  return {
-    ...mock,
-    stats: normalizeStats(mock.stats || []),
-    monthlyRequestVolume: normalizeMonthly(mock.monthlyRequestVolume || []),
-    requestQueue: normalizeQueue(mock.requestQueue || []),
-    recentActivities: normalizeActivities(mock.recentActivities || []),
-    source: 'mock',
-  }
-}
-
-const withMockFallback = async (request) => {
-  if (!shouldUseApi()) return normalizeMockMetrics()
-
-  try {
-    return await request()
-  } catch (error) {
-    if (error.name === 'AbortError') throw error
-
-    if (env.enableMockData) {
-      return {
-        ...normalizeMockMetrics(),
-        warning: error.message,
-      }
-    }
-
-    throw error
-  }
-}
-
 export const dashboardMetricsApi = {
-  getMetrics: ({ months = 6, recent = 10, signal } = {}) => (
-    withMockFallback(async () => {
-      const params = new URLSearchParams({
-        months: String(months),
-        recent: String(recent),
-      })
-
-      const response = await adminApiRequest(`/api/Dashboard/metrics?${params.toString()}`, {
-        method: 'GET',
-        signal,
-      })
-
-      return normalizeMetrics(response)
+  async getMetrics({ months = 6, recent = 10, signal } = {}) {
+    const params = new URLSearchParams({
+      months: String(months),
+      recent: String(recent),
     })
-  ),
+
+    const response = await adminApiRequest(`/api/Dashboard/metrics?${params.toString()}`, {
+      method: 'GET',
+      signal,
+    })
+
+    return normalizeMetrics(response)
+  },
 }

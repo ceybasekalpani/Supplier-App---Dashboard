@@ -13,6 +13,7 @@ import PageHeader from '../components/ui/PageHeader'
 import StatusBadge from '../components/ui/StatusBadge'
 import { supplierDashboardApi } from '../services/supplierDashboardApi'
 import { formatCurrency, formatDisplayDate, formatQuantity } from '../utils/formatters'
+import { focusNextFieldOnEnter } from '../utils/keyboardNav'
 
 const REQUEST_TYPES = [
   { id: 'advance', label: 'Advance', icon: Droplet, tone: 'amber' },
@@ -105,7 +106,7 @@ export default function Suppliers() {
         signal,
       })
 
-      setSuppliers(response.suppliers)
+      setSuppliers(response.suppliers || [])
       setPeriod({
         activeMonth: response.activeMonth,
         previousMonth: response.previousMonth,
@@ -199,7 +200,10 @@ export default function Suppliers() {
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <section className="rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-700">
+          <div
+            className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-700"
+            onKeyDown={focusNextFieldOnEnter}
+          >
             <div className="flex min-w-72 flex-1 items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 dark:border-slate-700 dark:bg-slate-900">
               <Search size={18} className="text-slate-400" />
               <input
