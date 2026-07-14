@@ -141,9 +141,9 @@ export default function PermissionsMatrix({
                             disabled={!isModuleEnabled}
                           >
                             {isEnabled ? (
-                              <CheckSquare size="16" className="text-emerald-600 dark:text-emerald-400 mt-0.5 flex-shrink-0" />
+                              <CheckSquare size="16" className="text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0" />
                             ) : (
-                              <Square size="16" className="text-slate-400 mt-0.5 flex-shrink-0" />
+                              <Square size="16" className="text-slate-400 mt-0.5 shrink-0" />
                             )}
                             <div>
                               <p className={`text-sm font-medium ${isEnabled ? 'text-emerald-800 dark:text-emerald-300' : 'text-slate-700 dark:text-slate-300'}`}>

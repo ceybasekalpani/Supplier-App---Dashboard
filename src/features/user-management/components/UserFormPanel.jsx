@@ -22,7 +22,7 @@ export default function UserFormPanel({
   onDiscard,
 }) {
   return (
-    <div className="w-96 flex-shrink-0 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-5 space-y-4" onKeyDown={focusNextFieldOnEnter}>
+    <div className="w-96 shrink-0 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-5 space-y-4" onKeyDown={focusNextFieldOnEnter}>
       <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-700 pb-3">
         <h3 className="font-semibold text-slate-900 dark:text-white">{editingUser ? 'Edit User' : 'Create New User'}</h3>
         {editingUser && <button onClick={onDiscard} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>}

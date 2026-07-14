@@ -120,7 +120,7 @@ export default function Suppliers() {
               : 'border-amber-200 bg-amber-50 text-amber-700'
           }`}
         >
-          <AlertCircle size={18} className="mt-0.5 flex-shrink-0" />
+          <AlertCircle size={18} className="mt-0.5 shrink-0" />
           <div className="flex-1">
             <p className="font-semibold">{error ? (errorStatus === 401 ? 'Authentication required' : 'Supplier data could not be loaded') : 'Using local preview data'}</p>
             <p className="text-xs opacity-80">{error || warning}</p>

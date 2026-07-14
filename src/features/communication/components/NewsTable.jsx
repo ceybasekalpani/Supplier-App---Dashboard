@@ -20,7 +20,7 @@ export default function NewsTable({
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[820px] text-sm">
+      <table className="w-full min-w-205 text-sm">
         <thead className="border-y border-slate-200 bg-white text-xs uppercase text-slate-400 dark:border-slate-700 dark:bg-slate-800">
           <tr>
             <th className="w-10 px-4 py-3 text-left font-semibold">

@@ -26,7 +26,7 @@ export default function Requests() {
       {r.requestError && (
         <div className="flex items-start justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-900/15 dark:text-red-300">
           <div className="flex items-start gap-2">
-            <Info size={16} className="mt-0.5 flex-shrink-0" />
+            <Info size={16} className="mt-0.5 shrink-0" />
 
             <div>
               <p className="font-semibold">Request data could not be synchronized</p>

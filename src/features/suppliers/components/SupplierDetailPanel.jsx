@@ -91,7 +91,7 @@ export default function SupplierDetailPanel({
           })}
         </div>
 
-        <div className="max-h-[26rem] space-y-2 overflow-y-auto pr-1">
+        <div className="max-h-104 space-y-2 overflow-y-auto pr-1">
           {selectedRequests.length > 0 ? (
             selectedRequests.map(request => (
               <div key={`${requestType}-${request.id}-${request.date}`} className="rounded-lg border border-slate-100 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900">
@@ -112,7 +112,7 @@ export default function SupplierDetailPanel({
                   </div>
                   <div className="flex justify-between gap-3">
                     <span className="text-slate-400">Remarks</span>
-                    <span className="max-w-[13rem] text-right font-semibold text-slate-600 dark:text-slate-300">{request.remarks || EMPTY_DASH}</span>
+                    <span className="max-w-52 text-right font-semibold text-slate-600 dark:text-slate-300">{request.remarks || EMPTY_DASH}</span>
                   </div>
                 </div>
               </div>

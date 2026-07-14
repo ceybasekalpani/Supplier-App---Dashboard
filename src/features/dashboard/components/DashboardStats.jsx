@@ -72,10 +72,10 @@ export default function DashboardStats({ stats }) {
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className={`text-xs font-semibold uppercase tracking-wide ${style.header}`}>{item.label}</p>
-                  <p className="mt-2 break-words text-3xl font-bold text-slate-900 dark:text-white">{item.value}</p>
+                  <p className="mt-2 wrap-break-word text-3xl font-bold text-slate-900 dark:text-white">{item.value}</p>
                   <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{item.description}</p>
                 </div>
-                <div className={`h-10 w-10 flex-shrink-0 rounded-lg flex items-center justify-center ${style.accent}`}>
+                <div className={`h-10 w-10 shrink-0 rounded-lg flex items-center justify-center ${style.accent}`}>
                   <Icon size={19} />
                 </div>
               </div>

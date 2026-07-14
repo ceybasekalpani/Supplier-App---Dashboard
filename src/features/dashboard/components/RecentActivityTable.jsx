@@ -61,7 +61,7 @@ export default function RecentActivityTable({ activities }) {
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[620px] text-sm">
+        <table className="w-full min-w-155 text-sm">
           <thead className="bg-slate-50 dark:bg-slate-900/60 text-xs uppercase text-slate-500 dark:text-slate-400">
             <tr>
               <th className="px-5 py-3 text-left font-semibold">User</th>

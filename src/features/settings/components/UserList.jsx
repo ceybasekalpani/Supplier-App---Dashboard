@@ -4,7 +4,7 @@ import StatusBadge from '../../../components/ui/StatusBadge'
 
 export default function UserList({ users, selectedUser, onUserSelect, loading }) {
   return (
-    <div className="w-80 flex-shrink-0 space-y-5">
+    <div className="w-80 shrink-0 space-y-5">
       <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
         <div className="p-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
           <div className="flex items-center gap-2">
@@ -25,7 +25,7 @@ export default function UserList({ users, selectedUser, onUserSelect, loading })
                 <div className="min-w-0 flex-1">
                   <div className="flex justify-between items-center gap-2">
                     <span className={`font-medium text-sm truncate ${selectedUser?.id === user.id ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-700 dark:text-slate-300'}`}>{user.name}</span>
-                    {selectedUser?.id === user.id && <Check size="14" className="text-emerald-500 flex-shrink-0" />}
+                    {selectedUser?.id === user.id && <Check size="14" className="text-emerald-500 shrink-0" />}
                   </div>
                   <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{user.email}</p>
                 </div>

@@ -6,7 +6,7 @@ export default function FiltersBar({ searchTerm, onSearchTermChange, statusFilte
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
       <div className="flex flex-wrap items-center gap-3" onKeyDown={focusNextFieldOnEnter}>
-        <div className="relative min-w-[220px] flex-1">
+        <div className="relative min-w-55 flex-1">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="search"

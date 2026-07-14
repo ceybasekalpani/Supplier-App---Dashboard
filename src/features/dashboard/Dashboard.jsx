@@ -79,7 +79,7 @@ export default function Dashboard() {
 
       {error && (
         <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-900/15 dark:text-amber-200">
-          <AlertCircle size={18} className="mt-0.5 flex-shrink-0" />
+          <AlertCircle size={18} className="mt-0.5 shrink-0" />
           <div>
             <p className="font-semibold">Dashboard metrics could not be loaded</p>
             <p className="text-xs opacity-80">{error}</p>

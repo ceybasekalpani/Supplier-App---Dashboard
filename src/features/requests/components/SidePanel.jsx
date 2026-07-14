@@ -21,7 +21,7 @@ export default function SidePanel({
 }) {
   if (!req) {
     return (
-      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-8 text-center text-slate-400 flex flex-col items-center justify-center min-h-[220px] shadow-sm">
+      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-8 text-center text-slate-400 flex flex-col items-center justify-center min-h-55 shadow-sm">
         <Inbox size={28} className="mb-2 opacity-40" />
         <p className="text-sm">Select a request to view details</p>
       </div>
@@ -87,7 +87,7 @@ export default function SidePanel({
 
       {canEdit && (
         <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md">
-          <Pencil size={14} className="text-green-700 flex-shrink-0" />
+          <Pencil size={14} className="text-green-700 shrink-0" />
           <p className="text-xs text-green-700 dark:text-green-300">
             Only remarks can be edited for pending and rejected requests.
           </p>

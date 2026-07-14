@@ -25,13 +25,13 @@ export default function Sidebar({ collapsed, onToggle }) {
 
   return (
     <aside
-      className={`fixed top-0 left-0 bottom-0 z-50 flex flex-col border-r transition-all duration-300 ${collapsed ? 'w-[60px]' : 'w-[240px]'}`}
+      className={`fixed top-0 left-0 bottom-0 z-50 flex flex-col border-r transition-all duration-300 ${collapsed ? 'w-15' : 'w-60'}`}
       style={{ backgroundColor: 'var(--theme-card)', borderColor: 'var(--theme-border)' }}
     >
 
       {/* Logo */}
       <div className="flex items-center gap-3 px-4 py-5 border-b" style={{ borderColor: 'var(--theme-border)' }}>
-        <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: 'var(--theme-primary)' }}>
+        <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: 'var(--theme-primary)' }}>
           <Leaf size={16} className="text-white" />
         </div>
         {!collapsed && (
@@ -61,7 +61,7 @@ export default function Sidebar({ collapsed, onToggle }) {
               color: isActive ? 'var(--theme-white)' : 'var(--theme-textSecondary)',
             })}
           >
-            <Icon size={18} className="flex-shrink-0" />
+            <Icon size={18} className="shrink-0" />
             {!collapsed && <span className="flex-1 truncate">{label}</span>}
             {!collapsed && badge && (
               <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{badge}</span>

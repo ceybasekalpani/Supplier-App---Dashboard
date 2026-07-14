@@ -53,7 +53,7 @@ export default function BorrowerSummaryTable({
         </div>
       ) : (
         <div className="max-h-72 overflow-auto">
-          <table className="w-full min-w-[920px] text-sm">
+          <table className="w-full min-w-230 text-sm">
             <thead className="sticky top-0 z-10 bg-slate-50 text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-800">
               <tr className="border-b border-slate-200 dark:border-slate-700">
                 <th className="px-4 py-3 text-left">Disbursement Category</th>
