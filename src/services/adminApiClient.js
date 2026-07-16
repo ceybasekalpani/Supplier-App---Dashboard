@@ -1,3 +1,4 @@
+import axios from 'axios'
 import { env } from '../config/env'
 
 const ADMIN_TOKEN_KEY = 'dashboardAdminToken'
@@ -5,17 +6,20 @@ const ADMIN_USER_KEY = 'dashboardAdminUser'
 
 const API_BASE_URL = env.apiBaseUrl || env.API_BASE_URL || ''
 
-const parseResponseBody = async response => {
-  const text = await response.text()
-
-  if (!text) return null
+// Mirrors the previous fetch-based parseResponseBody: parse JSON when possible,
+// fall back to raw text (e.g. the delivery-note print HTML endpoint), and
+// treat an empty body as null. Axios' default JSON transform throws on a
+// parse failure, so this custom transform is required to keep that behavior.
+const transformResponse = [(data) => {
+  if (typeof data !== 'string') return data
+  if (!data) return null
 
   try {
-    return JSON.parse(text)
+    return JSON.parse(data)
   } catch {
-    return text
+    return data
   }
-}
+}]
 
 export const adminAuthStorage = {
   getToken() {
@@ -50,13 +54,14 @@ export const adminAuthStorage = {
 }
 
 export async function adminApiRequest(path, options = {}) {
+  const { method = 'GET', body, headers: customHeaders, signal, ...rest } = options
   const token = adminAuthStorage.getToken()
-  const isFormDataBody = typeof FormData !== 'undefined' && options.body instanceof FormData
+  const isFormDataBody = typeof FormData !== 'undefined' && body instanceof FormData
 
   const headers = {
     Accept: 'application/json',
-    ...(options.body && !isFormDataBody ? { 'Content-Type': 'application/json' } : {}),
-    ...(options.headers || {}),
+    ...(body && !isFormDataBody ? { 'Content-Type': 'application/json' } : {}),
+    ...(customHeaders || {}),
   }
 
   if (token) {
@@ -66,13 +71,21 @@ export async function adminApiRequest(path, options = {}) {
   let response
 
   try {
-    response = await fetch(`${API_BASE_URL}${path}`, {
-      ...options,
+    response = await axios.request({
+      url: `${API_BASE_URL}${path}`,
+      method,
+      data: body,
       headers,
+      signal,
+      validateStatus: () => true,
+      transformResponse,
+      ...rest,
     })
   } catch (error) {
-    if (error.name === 'AbortError') {
-      throw error
+    if (axios.isCancel(error) || error.code === 'ERR_CANCELED' || error.name === 'CanceledError') {
+      const abortError = new Error(error.message || 'The operation was aborted.')
+      abortError.name = 'AbortError'
+      throw abortError
     }
 
     const connectionError = new Error(
@@ -82,9 +95,9 @@ export async function adminApiRequest(path, options = {}) {
     throw connectionError
   }
 
-  const data = await parseResponseBody(response)
+  const data = response.data
 
-  if (!response.ok) {
+  if (response.status < 200 || response.status >= 300) {
     const validationMessages = data?.errors
       ? Object.entries(data.errors)
           .flatMap(([field, messages]) => (

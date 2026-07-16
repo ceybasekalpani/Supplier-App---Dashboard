@@ -1,6 +1,18 @@
+import axios from 'axios'
 import { env } from '../config/env'
 import { adminAuthStorage } from './adminApiClient'
 import { dashboardPermissionsApi } from './dashboardPermissionsApi'
+
+// Mirrors the previous fetch-based `response.json().catch(() => null)`:
+// an empty or non-JSON body resolves to null instead of throwing.
+const loginTransformResponse = [(data) => {
+  if (typeof data !== 'string' || !data) return null
+  try {
+    return JSON.parse(data)
+  } catch {
+    return null
+  }
+}]
 
 const API_BASE_URL = env.apiBaseUrl || env.API_BASE_URL || ''
 
@@ -24,21 +36,22 @@ export const adminAuthApi = {
   async login({ username, password }) {
     adminAuthStorage.removeToken()
 
-    const response = await fetch(`${API_BASE_URL}/api/DashboardAuth/login`, {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        username,
-        password,
-      }),
-    })
+    const response = await axios.post(
+      `${API_BASE_URL}/api/DashboardAuth/login`,
+      { username, password },
+      {
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        validateStatus: () => true,
+        transformResponse: loginTransformResponse,
+      }
+    )
 
-    const data = await response.json().catch(() => null)
+    const data = response.data
 
-    if (!response.ok) {
+    if (!(response.status >= 200 && response.status < 300)) {
       throw new Error(data?.message || 'Dashboard admin login failed')
     }
 

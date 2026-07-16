@@ -1,3 +1,4 @@
+import axios from 'axios'
 import { env } from '../config/env'
 
 const TOKEN_KEYS = [
@@ -58,55 +59,75 @@ const describeNetworkError = (path) => {
   return `Cannot connect to backend API at ${target}. Start the ASP.NET Core API and confirm the Vite proxy target matches its launch URL. Requested: ${path}`
 }
 
-const readErrorMessage = async (response) => {
-  const fallback = `Request failed with ${response.status}`
-  const text = await response.text().catch(() => '')
-  if (!text) return fallback
+// Mirrors the previous fetch-based readErrorMessage/response.json() parsing:
+// parse JSON when possible, fall back to raw text, and treat an empty body as
+// null. Axios' default JSON transform throws on a parse failure, so this
+// custom transform is required to keep that behavior.
+const transformResponse = [(data) => {
+  if (typeof data !== 'string') return data
+  if (!data) return null
 
   try {
-    const parsed = JSON.parse(text)
-    return parsed.message || parsed.title || JSON.stringify(parsed.errors || parsed)
+    return JSON.parse(data)
   } catch {
-    return text
+    return data
   }
+}]
+
+const deriveErrorMessage = (response) => {
+  const data = response.data
+
+  if (data === null || data === undefined || data === '') {
+    return `Request failed with ${response.status}`
+  }
+
+  if (typeof data === 'string') return data
+
+  return data.message || data.title || JSON.stringify(data.errors || data)
 }
 
 export async function apiRequest(path, options = {}) {
-  const headers = new Headers(options.headers || {})
-  const { body, skipAuth = false, ...restOptions } = options
+  const { body, skipAuth = false, method = 'GET', headers: customHeaders, signal, ...restOptions } = options
   const token = skipAuth ? '' : getAuthToken()
 
-  headers.set('Accept', 'application/json')
-  if (body !== undefined && !headers.has('Content-Type')) {
-    headers.set('Content-Type', 'application/json')
+  const headers = {
+    Accept: 'application/json',
+    ...(customHeaders || {}),
+  }
+
+  if (body !== undefined && !headers['Content-Type'] && !headers['content-type']) {
+    headers['Content-Type'] = 'application/json'
   }
 
   if (token) {
-    headers.set('Authorization', `Bearer ${token}`)
+    headers.Authorization = `Bearer ${token}`
   }
 
   let response
 
   try {
-    const requestBody = body !== undefined && headers.get('Content-Type') === 'application/json' && typeof body !== 'string'
-      ? JSON.stringify(body)
-      : body
-
-    response = await fetch(buildApiUrl(path), {
-      ...restOptions,
+    response = await axios.request({
+      url: buildApiUrl(path),
+      method,
+      data: body,
       headers,
-      body: requestBody,
+      signal,
+      validateStatus: () => true,
+      transformResponse,
+      ...restOptions,
     })
   } catch (error) {
-    if (error.name === 'AbortError') {
-      throw error
+    if (axios.isCancel(error) || error.code === 'ERR_CANCELED' || error.name === 'CanceledError') {
+      const abortError = new Error(error.message || 'The operation was aborted.')
+      abortError.name = 'AbortError'
+      throw abortError
     }
 
     throw new Error(describeNetworkError(path), { cause: error })
   }
 
-  if (!response.ok) {
-    const message = await readErrorMessage(response)
+  if (!(response.status >= 200 && response.status < 300)) {
+    const message = deriveErrorMessage(response)
     const error = new Error(
       response.status === 401 && !skipAuth
         ? 'Login required. The dashboard API is protected, and no valid JWT token was found in this browser session.'
@@ -117,5 +138,5 @@ export async function apiRequest(path, options = {}) {
   }
 
   if (response.status === 204) return null
-  return response.json().catch(() => null)
+  return response.data ?? null
 }

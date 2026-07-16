@@ -1,3 +1,4 @@
+import axios from 'axios'
 import { useEffect, useState } from 'react'
 import { env } from '../config/env'
 import { adminAuthStorage } from '../services/adminApiClient'
@@ -30,16 +31,13 @@ export function useAuthenticatedImageSrc(url) {
     let cancelled = false
     const token = adminAuthStorage.getToken()
 
-    fetch(protectedUrl, {
+    axios.get(protectedUrl, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
+      responseType: 'blob',
     })
       .then(response => {
-        if (!response.ok) throw new Error(`HTTP ${response.status}`)
-        return response.blob()
-      })
-      .then(blob => {
         if (cancelled) return
-        objectUrl = URL.createObjectURL(blob)
+        objectUrl = URL.createObjectURL(response.data)
         setBlobSrc(objectUrl)
       })
       .catch(() => {
