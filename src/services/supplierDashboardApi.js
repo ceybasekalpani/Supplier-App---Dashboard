@@ -44,6 +44,11 @@ const normalizeSupplier = (supplier) => ({
   accountNo: String(getValue(supplier, 'accountNo') || ''),
   payment: String(getValue(supplier, 'payment') || ''),
   status: normalizeStatus(getValue(supplier, 'status') || 'inactive'),
+  land: {
+    acres: Number(getValue(supplier, 'landAcre') ?? 0),
+    rood: Number(getValue(supplier, 'landRood') ?? 0),
+    perch: Number(getValue(supplier, 'landPerch') ?? 0),
+  },
   advanceRequests: (getValue(supplier, 'advanceRequests') || []).map(request => normalizeRequest(request, 'advance')),
   fertilizerRequests: (getValue(supplier, 'fertilizerRequests') || []).map(request => normalizeRequest(request, 'fertilizer')),
   itemRequests: (getValue(supplier, 'itemRequests') || []).map(request => normalizeRequest(request, 'item')),

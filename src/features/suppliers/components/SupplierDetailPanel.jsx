@@ -60,6 +60,10 @@ export default function SupplierDetailPanel({
           <InfoRow label="Bank" value={selected.bank} />
           <InfoRow label="Branch" value={selected.branch} />
           <InfoRow label="Account" value={selected.accountNo} />
+          <InfoRow
+            label="Land"
+            value={`${selected.land?.acres ?? 0}A ${selected.land?.rood ?? 0}R ${selected.land?.perch ?? 0}P`}
+          />
         </div>
       </section>
 

@@ -15,7 +15,7 @@ const normalizeStatus = (status, isActive = true) => (
 
 const normalizeNews = (row) => {
   const isActive = Boolean(getValue(row, 'isActive'))
-
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             
   return {
     id: Number(getValue(row, 'id') || 0),
     title: String(getValue(row, 'title') || ''),
