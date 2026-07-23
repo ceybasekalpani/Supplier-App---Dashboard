@@ -40,16 +40,6 @@ export default function BorrowerDispatchTable({
                 className="min-w-44"
                 buttonClassName="bg-green-700 text-slate-100 hover:bg-green-800 dark:bg-green-700 dark:text-slate-100 [&>span]:!text-slate-100"
               />
-              {selectedNote.noteIds?.length === 1 && (
-                <button
-                  type="button"
-                  onClick={() => onDownloadSelectedNote(selectedNote.noteIds[0])}
-                  disabled={!canExport}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
-                >
-                  <Download size={12} /> Download Selected DN
-                </button>
-              )}
             </div>
           )}
         </div>
