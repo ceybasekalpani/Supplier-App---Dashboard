@@ -2,11 +2,13 @@ import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Leaf, LogIn, RefreshCw } from 'lucide-react'
 import { adminAuthApi } from '../services/adminAuthApi'
+import { useAdminStore } from '../store/adminStore'
 import { focusNextFieldOnEnter } from '../utils/keyboardNav'
 
 export default function AdminLogin() {
   const navigate = useNavigate()
   const location = useLocation()
+  const setCurrentAdmin = useAdminStore(state => state.setCurrentAdmin)
 
   const [form, setForm] = useState({
     username: '',
@@ -42,7 +44,8 @@ export default function AdminLogin() {
     setError('')
 
     try {
-      await adminAuthApi.login({ username, password })
+      const admin = await adminAuthApi.login({ username, password })
+      setCurrentAdmin(admin)
       navigate(redirectTo, { replace: true })
     } catch (loginError) {
       setError(loginError.message || 'Invalid dashboard admin username or password.')
